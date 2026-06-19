@@ -622,7 +622,7 @@ export default function Grade() {
           </div>
 
           <div className="grade-nav-buttons">
-            <button className="btn btn-secondary" onClick={handlePrev} disabled={sIdx === 0 && qIdx === 0}>
+            <button className="btn btn-secondary" onClick={handlePrev} disabled={sIdx === 0}>
               ← Vorige leerling
             </button>
 

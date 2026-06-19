@@ -65,12 +65,17 @@ def session_report(session_id: int, db: Session = Depends(get_db)):
     test = db.query(Test).filter(Test.id == session.test_id).first()
     questions = sorted(test.questions, key=lambda q: q.order)
 
-    students = (
-        db.query(Student)
-        .filter(Student.class_name == session.class_name)
-        .order_by(Student.name)
-        .all()
-    )
+    order = session.student_order or []
+    if order:
+        by_id = {s.id: s for s in db.query(Student).filter(Student.id.in_(order)).all()}
+        students = [by_id[sid] for sid in order if sid in by_id]
+    else:
+        students = (
+            db.query(Student)
+            .filter(Student.class_name == session.class_name)
+            .order_by(Student.name)
+            .all()
+        )
 
     scores = db.query(Score).filter(Score.session_id == session_id).all()
 
