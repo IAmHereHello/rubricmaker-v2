@@ -216,6 +216,11 @@ Students not entered during Q1 are never added to `student_order` and are exclud
 
 **Resume detection** (`shouldEnterQ1Mode`): if `student_order` is empty → Q1 mode. If any Q2+ question has a score in `scoreMap` → Q1 is done, regular resume. For single-question tests: Q1 mode until all ordered students have a non-null score. This avoids a DB migration for a "Q1 complete" flag.
 
+### Route-skip behavior
+When advancing to the next question — either via **"Volgende vraag"** in the regular flow (`handleNextQuestion`) or when Q1 mode ends (`finishQ1`) — the grading view walks forward past any questions whose `routes` list excludes **every** student in the current stack (`orderedStudents`). For each skipped question, `createExcludedScores()` is called immediately to write excluded-score rows for all stacked students. A Dutch notice banner is then shown for 5 seconds identifying which question(s) were skipped and which routes were missing.
+
+This means the teacher never lands on a dead-end question with zero applicable students. The skip logic uses `orderedStudents` (the Q1-built stack), so students outside the stack are correctly ignored.
+
 ### Previous scores panel is collapsed by default
 `showPrev` initialises to `false` in `Grade.jsx`. This is intentional: the teacher should not see a student's previous question scores while grading the current question, to avoid anchoring bias. Do not initialise it to `true`.
 
@@ -237,10 +242,12 @@ A `Test` and its `Question`s are never modified during a session. Multiple sessi
 
 3. **Test renaming** now works: `PUT /tests/{id}` exists and `saveName()` in `TestEdit.jsx` calls `api.updateTest()` and updates local state.
 
+4. **Route-skip** (Section 6): `handleNextQuestion` and `finishQ1` now walk past questions with zero applicable students in the stack, create excluded-score rows for them, and show a 5-second Dutch banner. Before this fix, the grading view dead-ended on such questions.
+
 ### Sensitive areas that have been touched before
 
 - **Grading order** — Q1 now uses type-to-select (see Section 6). `shouldEnterQ1Mode()` in `Grade.jsx` detects whether to render the Q1 input UI or the regular flow. The original bug (Q2+ used alphabetical instead of saved order) is still fixed via `getOrderedStudents()` checking `sess.student_order?.length`. Do not regress either.
-- **Autofocus on score input** — the score number input keeps its `autoFocus` attribute (initial mount) **and** a `scoreInputRef` + `useEffect` that re-focuses and selects the input whenever the current question/student changes, so the teacher can type immediately when switching students. Removing either breaks keyboard-first grading. The input also handles `Enter` (advance), `ArrowRight` (advance), and `ArrowLeft` (go back).
+- **Autofocus on score input** — the score number input uses a `scoreInputRef` + `useEffect` to focus and select the input whenever the current question/student changes (including on first render of the regular flow), so the teacher can type immediately. The input does **not** have a bare `autoFocus` attribute; the ref+effect is the single focus mechanism. Removing it breaks keyboard-first grading. The input also handles `Enter` (advance), `ArrowRight` (advance), and `ArrowLeft` (go back).
 - **Resume position on page load** — `findResumePosition()` in `Grade.jsx` scans questions and applicable students to find the first entry without a completed score, so a session can be resumed after closing the browser. Do not replace this with always starting at Q1/S1.
 
 ---
