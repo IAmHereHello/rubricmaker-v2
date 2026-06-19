@@ -100,3 +100,4 @@ Elke vraag is van toepassing op een subset van routes. Niet-toepasselijke vragen
 - **Reproductie** — standaardprocedures en feitenkennis
 - **Verbinding** — concepten verbinden en toepassen
 - **Reflectie** — redeneren, beargumenteren, wiskundig denken
+# rubricgrader
