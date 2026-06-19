@@ -270,6 +270,10 @@ A `Test` and its `Question`s are never modified during a session. Multiple sessi
 
 4. **Route-skip** (Section 6): `handleNextQuestion` and `finishQ1` now walk past questions with zero applicable students in the stack, create excluded-score rows for them, and show a 5-second Dutch banner. Before this fix, the grading view dead-ended on such questions.
 
+5. **"Vorige leerling" dead-click** (`Grade.jsx`): the Back button was disabled only when `sIdx === 0 && qIdx === 0`. At `sIdx === 0, qIdx > 0` it was enabled but `handlePrev` did nothing because it only calls `setSIdx` when `sIdx > 0`. Fixed by disabling the button whenever `sIdx === 0`.
+
+6. **Session report ghost students** (`backend/routers/reports.py`): `GET /reports/session/{id}` previously returned all students in `session.class_name`, including those the teacher skipped during Q1 ("Einde van de stapel"). Those students appeared in the class matrix as all-dash rows. Fixed by querying only students whose IDs are in `session.student_order`, preserving session order. Falls back to all class students (alphabetical) only when `student_order` is empty.
+
 ### Sensitive areas that have been touched before
 
 - **Grading order** — Q1 now uses type-to-select (see Section 6). `shouldEnterQ1Mode()` in `Grade.jsx` detects whether to render the Q1 input UI or the regular flow. The original bug (Q2+ used alphabetical instead of saved order) is still fixed via `getOrderedStudents()` checking `sess.student_order?.length`. Do not regress either.
