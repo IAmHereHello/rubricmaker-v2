@@ -13,6 +13,10 @@ A single-teacher web app for grading math tests and tracking student progress ov
 - Run grading sessions: one question at a time, all students per question.
 - View per-student progress as a heatmap of domain × pyramid level.
 - View a class overview heatmap filtered by route.
+- View per-session reports (student-level and class-level score matrix).
+- View per-student progress-over-time charts (line charts by domain and pyramid level).
+- View radar charts per student (with multi-student overlay) and per class (one line per route).
+- Export any report to PDF.
 
 The app is designed for a single user with no authentication. All text in the UI is Dutch.
 
@@ -24,7 +28,7 @@ The app is designed for a single user with no authentication. All text in the UI
 |---|---|
 | Backend | Python, FastAPI, SQLAlchemy (ORM), SQLite (database file `rubricmaker.db`) |
 | Backend schema validation | Pydantic v2 |
-| Frontend | React 18, React Router v6, Axios, Vite 5 |
+| Frontend | React 18, React Router v6, Axios, Vite 5, Recharts (charts), jsPDF + html2canvas (PDF export) |
 | Language | Python 3.11+, JavaScript (JSX, no TypeScript) |
 | Runtime | Raspberry Pi 5, accessed remotely via Tailscale |
 
@@ -149,6 +153,16 @@ All routers are registered in `backend/main.py`. CORS is open (`allow_origins=["
 
 Both progress endpoints filter out excluded scores and scores where `points IS NULL` before computing percentages.
 
+### `/reports` — `backend/routers/reports.py`
+| Method | Path | Description |
+|---|---|---|
+| GET | `/reports/session/{session_id}` | Per-session report: question list, student list, full score matrix keyed by `"{student_id}|{question_id}"`, and per-question class averages (applicable students only) |
+| GET | `/reports/student/{student_id}/timeline` | Per-student progress over time: sessions sorted chronologically, each with `by_domain` and `by_level` breakdowns (pct = null if no applicable questions in that session for that axis) |
+| GET | `/reports/student/{student_id}/radar` | Radar data for one student: `domain_scores` and `level_scores` arrays, each with `scored`, `max`, and `pct` (null = no applicable questions on that axis) |
+| GET | `/reports/class/{class_name}/radar` | Class radar: per-route aggregated `domain_scores` and `level_scores` (same structure as student radar) |
+
+All report endpoints apply the same route-exclusion logic as the rest of the app: excluded and ungraded scores are ignored; axes with zero applicable questions yield `pct: null`, not `pct: 0`.
+
 ---
 
 ## 5. Frontend Structure
@@ -164,8 +178,12 @@ Source: `frontend/src/App.jsx`. Router is `BrowserRouter`. All API calls go thro
 | `TestEdit.jsx` | `/tests/:id/edit` | Add/edit/delete/reorder questions for a test; rename test via pencil; domain and pyramid level are fixed `<select>` dropdowns |
 | `SessionNew.jsx` | `/sessions/new` | Pick a test and class, then navigate to grading view |
 | `Grade.jsx` | `/sessions/:id/grade` | Main grading view (see Section 6 for flow details) |
-| `StudentProgress.jsx` | `/students/:id/progress` | Domain × pyramid heatmap + per-session score table for one student |
-| `ClassOverview.jsx` | `/classes/:class_name/overview` | Route-filtered class heatmap; route selector buttons at top |
+| `StudentProgress.jsx` | `/students/:id/progress` | Domain × pyramid heatmap + per-session score table for one student; "Rapport & Radar" button links to `/students/:id/report` |
+| `ClassOverview.jsx` | `/classes/:class_name/overview` | Route-filtered class heatmap; route selector buttons at top; "Radardiagram" button links to `/classes/:class_name/radar` |
+| `ReportHome.jsx` | `/reports` | Lists all sessions (newest first) with test name, class, date, and link to each session report |
+| `SessionReport.jsx` | `/reports/session/:id` | Per-session report with "Per leerling" tab (student dropdown + per-question score table) and "Klassenoverzicht" tab (question × student matrix); excluded questions shown as "n.v.t."; PDF export |
+| `StudentReport.jsx` | `/students/:id/report` | Two tabs: "Voortgang over tijd" (line charts per domain / per pyramid level across sessions) and "Radardiagram" (domain radar + level radar with multi-student overlay selector); PDF export |
+| `ClassRadar.jsx` | `/classes/:class_name/radar` | Domain radar + level radar, one line per route (oranje/geel/blauw) using `ROUTE_COLORS`; PDF export |
 
 `/` redirects to `/students`.
 
@@ -175,7 +193,15 @@ Source: `frontend/src/App.jsx`. Router is `BrowserRouter`. All API calls go thro
 
 ### Shared Constants
 
-- `constants.js` — single source of truth for `PYRAMID_LEVELS` (array of `{ value, label }`, where `value` is the stored code and `label` the De Lange display label), the `pyramidLabel(value)` helper, and `DOMAINS` (the fixed four-domain list). Imported by `TestEdit.jsx`, `Grade.jsx`, `StudentProgress.jsx`, and `ClassOverview.jsx`.
+- `constants.js` — single source of truth for all shared UI constants:
+  - `PYRAMID_LEVELS` — array of `{ value, label }` (value = stored DB code, label = De Lange display label). Used by `TestEdit.jsx`, `Grade.jsx`, `StudentProgress.jsx`, `ClassOverview.jsx`.
+  - `pyramidLabel(value)` — helper to look up a display label from a stored code.
+  - `DOMAINS` — fixed four-domain list `['Algebra', 'Meetkunde', 'Rekenen', 'Statistiek']`.
+  - `LEVELS` — `PYRAMID_LEVELS.map(l => l.value)`, convenience array of the three stored codes in order.
+  - `LEVEL_LABELS` — `{ reproductie: 'Reproduceren', ... }`, derived from `PYRAMID_LEVELS`. Used by the report pages.
+  - `ROUTE_COLORS` — `{ oranje: '#e07820', geel: '#a08b00', blauw: '#1a6ecc' }`, consistent colours for recharts lines.
+  - `STUDENT_COLORS` — array of 7 distinct colours for multi-student radar overlays.
+- `utils/exportPDF.js` — `exportPDF(element, filename)` captures a DOM element with `html2canvas` (scale 2) and writes it to a multi-page A4 PDF using `jspdf`.
 
 ### Styling
 
