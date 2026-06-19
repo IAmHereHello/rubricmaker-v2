@@ -4,7 +4,7 @@ import * as api from '../api.js'
 import { PYRAMID_LEVELS, pyramidLabel, DOMAINS } from '../constants.js'
 
 const ROUTES_ALL = ['oranje', 'geel', 'blauw']
-const EMPTY_Q = { description: '', answer: '', max_score: 1, routes: ['oranje', 'geel', 'blauw'], domain: DOMAINS[0], pyramid_level: PYRAMID_LEVELS[0].value, learning_goal_threshold: '' }
+const EMPTY_Q = { description: '', answer: '', max_score: 1, routes: ['oranje', 'geel', 'blauw'], domain: DOMAINS[0], pyramid_level: PYRAMID_LEVELS[0].value, learning_goal: '', learning_goal_threshold: '' }
 
 export default function TestEdit() {
   const { id } = useParams()
@@ -46,6 +46,7 @@ export default function TestEdit() {
       routes: q.routes || [],
       domain: q.domain || '',
       pyramid_level: q.pyramid_level,
+      learning_goal: q.learning_goal || '',
       learning_goal_threshold: q.learning_goal_threshold ?? '',
     })
     setEditingQ(q)
@@ -66,12 +67,17 @@ export default function TestEdit() {
     if (!qForm.domain) { setError('Domein is verplicht.'); return }
     if (qForm.routes.length === 0) { setError('Selecteer minimaal één route.'); return }
     const maxScore = parseInt(qForm.max_score)
+    const goalName = qForm.learning_goal.trim() || null
     const threshold = qForm.learning_goal_threshold !== '' ? parseInt(qForm.learning_goal_threshold) : null
+    if ((goalName && threshold === null) || (!goalName && threshold !== null)) {
+      setError('Vul zowel een leerdoelnaam als een drempelwaarde in, of laat beide leeg.')
+      return
+    }
     if (threshold !== null && (isNaN(threshold) || threshold < 1 || threshold > maxScore)) {
       setError(`Drempelwaarde moet tussen 1 en ${maxScore} liggen.`)
       return
     }
-    const payload = { ...qForm, max_score: maxScore, learning_goal_threshold: threshold }
+    const payload = { ...qForm, max_score: maxScore, learning_goal: goalName, learning_goal_threshold: threshold }
     try {
       if (editingQ === 'new') {
         await api.createQuestion({ ...payload, test_id: parseInt(id), order: test.questions.length })
@@ -187,8 +193,30 @@ export default function TestEdit() {
               </select>
             </div>
 
+          </div>
+
+          <div className="form-row" style={{ marginTop: 12 }}>
+            <div className="field" style={{ flex: 1 }}>
+              <label>Leerdoel <span className="text-muted" style={{ fontWeight: 400 }}>(optioneel)</span></label>
+              <input
+                type="text"
+                value={qForm.learning_goal}
+                onChange={e => setQForm(f => ({ ...f, learning_goal: e.target.value }))}
+                placeholder="bijv. Kwadratische vergelijkingen"
+                list="goal-names-list"
+                style={{ width: '100%' }}
+              />
+              <datalist id="goal-names-list">
+                {[...new Set(
+                  test.questions
+                    .filter(q => q.learning_goal && (editingQ === 'new' || q.id !== editingQ.id))
+                    .map(q => q.learning_goal)
+                )].map(name => <option key={name} value={name} />)}
+              </datalist>
+            </div>
+
             <div className="field">
-              <label>Drempel leerdoel <span className="text-muted" style={{ fontWeight: 400 }}>(optioneel)</span></label>
+              <label>Drempel (min. punten)</label>
               <input
                 type="number" min={1} max={qForm.max_score || 100}
                 value={qForm.learning_goal_threshold}
@@ -247,9 +275,9 @@ export default function TestEdit() {
                 <span style={{ fontWeight: 700, color: '#888', fontSize: 13 }}>V{idx + 1}</span>
                 <span className={levelClass(q.pyramid_level)}>{pyramidLabel(q.pyramid_level)}</span>
                 <span style={{ fontSize: 12, background: '#f0f3f8', borderRadius: 4, padding: '2px 7px', color: '#555' }}>{q.domain || '—'}</span>
-                {q.learning_goal_threshold != null && (
+                {q.learning_goal && (
                   <span style={{ fontSize: 12, background: '#e8f0fc', borderRadius: 4, padding: '2px 7px', color: '#1a6ecc' }}>
-                    leerdoel ≥{q.learning_goal_threshold}
+                    {q.learning_goal}{q.learning_goal_threshold != null ? ` ≥${q.learning_goal_threshold}` : ''}
                   </span>
                 )}
                 <span style={{ marginLeft: 'auto', fontSize: 13, color: '#555' }}>{q.max_score} pt</span>

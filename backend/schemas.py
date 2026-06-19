@@ -47,6 +47,7 @@ class QuestionCreate(BaseModel):
     routes: List[str] = ["oranje", "geel", "blauw"]
     domain: str = ""
     pyramid_level: str  # "reproductie" | "verbinding" | "reflectie"
+    learning_goal: Optional[str] = None
     learning_goal_threshold: Optional[int] = None
 
 class QuestionUpdate(BaseModel):
@@ -57,6 +58,7 @@ class QuestionUpdate(BaseModel):
     routes: Optional[List[str]] = None
     domain: Optional[str] = None
     pyramid_level: Optional[str] = None
+    learning_goal: Optional[str] = None
     learning_goal_threshold: Optional[int] = None
 
 class QuestionOut(BaseModel):
@@ -69,6 +71,7 @@ class QuestionOut(BaseModel):
     routes: List[str]
     domain: str
     pyramid_level: str
+    learning_goal: Optional[str] = None
     learning_goal_threshold: Optional[int] = None
     model_config = {"from_attributes": True}
 

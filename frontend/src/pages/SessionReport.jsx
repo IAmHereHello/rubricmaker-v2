@@ -21,15 +21,24 @@ function goalBadge(achieved) {
 }
 
 function computeGoals(questions, scores, studentId) {
-  let achieved = 0, total = 0
+  // Group questions by learning_goal name; a goal is achieved when ALL applicable
+  // questions in the group score >= their individual threshold.
+  const groups = {}
   questions.forEach(q => {
-    if (q.learning_goal_threshold == null) return
+    if (!q.learning_goal || q.learning_goal_threshold == null) return
     const sc = scores[`${studentId}|${q.id}`]
-    if (!sc || sc.excluded) return
-    total++
-    if (sc.points !== null && sc.points >= q.learning_goal_threshold) achieved++
+    if (sc && sc.excluded) return  // not applicable for this student's route
+    if (!groups[q.learning_goal]) groups[q.learning_goal] = { total: 0, passed: 0 }
+    groups[q.learning_goal].total++
+    if (sc && sc.points !== null && sc.points >= q.learning_goal_threshold) {
+      groups[q.learning_goal].passed++
+    }
   })
-  return { achieved, total }
+  const names = Object.keys(groups).filter(n => groups[n].total > 0)
+  return {
+    achieved: names.filter(n => groups[n].passed === groups[n].total).length,
+    total: names.length,
+  }
 }
 
 function StudentView({ data, selectedId, setSelectedId }) {
@@ -99,7 +108,7 @@ function StudentView({ data, selectedId, setSelectedId }) {
           <tbody>
             {data.questions.map((q, i) => {
               const sc = data.scores[`${student.id}|${q.id}`]
-              const isGoal = q.learning_goal_threshold != null
+              const isGoal = !!q.learning_goal && q.learning_goal_threshold != null
               const achieved = isGoal && sc && !sc.excluded && sc.points !== null && sc.points >= q.learning_goal_threshold
               return (
                 <tr key={q.id}>
@@ -108,7 +117,7 @@ function StudentView({ data, selectedId, setSelectedId }) {
                     {q.description}
                     {isGoal && (
                       <span style={{ marginLeft: 6, fontSize: 11, background: '#e8f0fc', color: '#1a6ecc', borderRadius: 3, padding: '1px 5px' }}>
-                        leerdoel ≥{q.learning_goal_threshold}
+                        {q.learning_goal} ≥{q.learning_goal_threshold}
                       </span>
                     )}
                   </td>
@@ -135,7 +144,7 @@ function StudentView({ data, selectedId, setSelectedId }) {
 function ClassView({ data }) {
   const colStyle = { textAlign: 'center', minWidth: 76, fontSize: 13 }
 
-  const goalQuestions = data.questions.filter(q => q.learning_goal_threshold != null)
+  const goalQuestions = data.questions.filter(q => q.learning_goal && q.learning_goal_threshold != null)
   const hasGoals = goalQuestions.length > 0
 
   const studentGoals = {}
@@ -143,6 +152,7 @@ function ClassView({ data }) {
     studentGoals[s.id] = computeGoals(data.questions, data.scores, s.id)
   })
 
+  const uniqueGoalNames = [...new Set(goalQuestions.map(q => q.learning_goal))]
   let classAvg = null
   if (hasGoals) {
     const studentsWithGoals = data.students.filter(s => studentGoals[s.id].total > 0)
@@ -157,7 +167,7 @@ function ClassView({ data }) {
       {hasGoals && classAvg !== null && (
         <div style={{ marginBottom: 14, fontSize: 14 }}>
           Klasgemiddelde leerdoelen:{' '}
-          <strong>{classAvg} van {goalQuestions.length}</strong> behaald
+          <strong>{classAvg} van {uniqueGoalNames.length}</strong> behaald
         </div>
       )}
       <div className="heatmap">
@@ -182,7 +192,7 @@ function ClassView({ data }) {
           <tbody>
             {data.questions.map((q, i) => {
               const avg = data.class_averages[String(q.id)]
-              const isGoal = q.learning_goal_threshold != null
+              const isGoal = !!q.learning_goal && q.learning_goal_threshold != null
               return (
                 <tr key={q.id}>
                   <td>
@@ -190,7 +200,7 @@ function ClassView({ data }) {
                     <span style={{ fontWeight: 500 }}>{q.description}</span>
                     {isGoal && (
                       <span style={{ marginLeft: 6, fontSize: 11, background: '#e8f0fc', color: '#1a6ecc', borderRadius: 3, padding: '1px 4px' }}>
-                        ≥{q.learning_goal_threshold}
+                        {q.learning_goal} ≥{q.learning_goal_threshold}
                       </span>
                     )}
                     {(q.domain || q.pyramid_level) && (

@@ -123,6 +123,7 @@ def session_report(session_id: int, db: Session = Depends(get_db)):
                 "domain": q.domain,
                 "pyramid_level": q.pyramid_level,
                 "routes": q.routes or [],
+                "learning_goal": q.learning_goal,
                 "learning_goal_threshold": q.learning_goal_threshold,
             }
             for q in questions

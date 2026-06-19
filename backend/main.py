@@ -11,11 +11,15 @@ models.Base.metadata.create_all(bind=engine)
 # Add columns introduced after initial schema without dropping existing data
 def _migrate_db():
     with engine.connect() as conn:
-        try:
-            conn.execute(text("ALTER TABLE questions ADD COLUMN learning_goal_threshold INTEGER"))
-            conn.commit()
-        except Exception:
-            pass  # column already exists
+        for stmt in [
+            "ALTER TABLE questions ADD COLUMN learning_goal TEXT",
+            "ALTER TABLE questions ADD COLUMN learning_goal_threshold INTEGER",
+        ]:
+            try:
+                conn.execute(text(stmt))
+                conn.commit()
+            except Exception:
+                pass  # column already exists
 
 _migrate_db()
 
