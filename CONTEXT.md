@@ -61,17 +61,22 @@ Relationships: has many `Question` (ordered by `Question.order`, cascade delete)
 
 ### Question
 ```
-id             Integer  PK
-test_id        Integer  FK → tests.id
-order          Integer  not null, default 0  (display order within the test)
-description    String   not null
-answer         String   default ""  (model answer shown during grading)
-max_score      Integer  not null
-routes         JSON     default []  — subset of ["oranje", "geel", "blauw"]
-domain         String   default ""  — one of: "Algebra" | "Meetkunde" | "Rekenen" | "Statistiek"
-pyramid_level  String   not null    — one of: "reproductie" | "verbinding" | "reflectie"
+id                      Integer  PK
+test_id                 Integer  FK → tests.id
+order                   Integer  not null, default 0  (display order within the test)
+description             String   not null
+answer                  String   default ""  (model answer shown during grading)
+max_score               Integer  not null
+routes                  JSON     default []  — subset of ["oranje", "geel", "blauw"]
+domain                  String   default ""  — one of: "Algebra" | "Meetkunde" | "Rekenen" | "Statistiek"
+pyramid_level           String   not null    — one of: "reproductie" | "verbinding" | "reflectie"
+learning_goal           String   nullable    — goal name/label; groups questions under the same named goal
+learning_goal_threshold Integer  nullable    — minimum points required to achieve this goal (null = not a goal question)
 ```
 **`pyramid_level`** stores stable short codes; the UI displays the De Lange labels via a code→label mapping (see Section 6). The codes are never shown to the user directly.
+
+**Learning goals:** a question is a learning goal question only when *both* `learning_goal` and `learning_goal_threshold` are set. Questions sharing the same `learning_goal` string are grouped into one logical goal. See Section 6 for achievement logic.
+
 Relationships: belongs to `Test`, has many `Score` (cascade delete).
 
 ### Session
@@ -156,12 +161,15 @@ Both progress endpoints filter out excluded scores and scores where `points IS N
 ### `/reports` — `backend/routers/reports.py`
 | Method | Path | Description |
 |---|---|---|
-| GET | `/reports/session/{session_id}` | Per-session report: question list, student list, full score matrix keyed by `"{student_id}|{question_id}"`, and per-question class averages (applicable students only) |
+| GET | `/reports/session/{session_id}` | Per-session report: question list (includes `learning_goal` and `learning_goal_threshold`), student list, full score matrix keyed by `"{student_id}|{question_id}"`, and per-question class averages (applicable students only) |
 | GET | `/reports/student/{student_id}/timeline` | Per-student progress over time: sessions sorted chronologically, each with `by_domain` and `by_level` breakdowns (pct = null if no applicable questions in that session for that axis) |
 | GET | `/reports/student/{student_id}/radar` | Radar data for one student: `domain_scores` and `level_scores` arrays, each with `scored`, `max`, and `pct` (null = no applicable questions on that axis) |
 | GET | `/reports/class/{class_name}/radar` | Class radar: per-route aggregated `domain_scores` and `level_scores` (same structure as student radar) |
 
 All report endpoints apply the same route-exclusion logic as the rest of the app: excluded and ungraded scores are ignored; axes with zero applicable questions yield `pct: null`, not `pct: 0`.
+
+### Schema migrations (`backend/main.py`)
+`_migrate_db()` runs at every startup and issues `ALTER TABLE ... ADD COLUMN` statements for columns added after the initial schema (`learning_goal TEXT`, `learning_goal_threshold INTEGER`). Each statement is wrapped in try/except so it is safely skipped if the column already exists. This means **no manual migration is needed on the Pi** for these columns — restarting the backend is sufficient.
 
 ---
 
@@ -175,14 +183,14 @@ Source: `frontend/src/App.jsx`. Router is `BrowserRouter`. All API calls go thro
 |---|---|---|
 | `Students.jsx` | `/students` | List students grouped by class; inline add/edit form; links to class overview and student progress |
 | `TestList.jsx` | `/tests` | List tests with create-and-redirect form |
-| `TestEdit.jsx` | `/tests/:id/edit` | Add/edit/delete/reorder questions for a test; rename test via pencil; domain and pyramid level are fixed `<select>` dropdowns |
+| `TestEdit.jsx` | `/tests/:id/edit` | Add/edit/delete/reorder questions for a test; rename test via pencil; domain and pyramid level are fixed `<select>` dropdowns; optional "Leerdoel" text input (with datalist autocomplete from other goal names in the test) + "Drempel" number input; both must be set together or both left empty |
 | `SessionNew.jsx` | `/sessions/new` | Pick a test and class, then navigate to grading view |
 | `Grade.jsx` | `/sessions/:id/grade` | Main grading view (see Section 6 for flow details) |
-| `StudentProgress.jsx` | `/students/:id/progress` | Domain × pyramid heatmap + per-session score table for one student; "Rapport & Radar" button links to `/students/:id/report` |
+| `StudentProgress.jsx` | `/students/:id/progress` | Domain × pyramid heatmap + per-session score table for one student; "Rapport & Radar" button links to `/students/:id/report`; session rows are clickable and navigate to the session report with the student pre-selected (`?student=`) |
 | `ClassOverview.jsx` | `/classes/:class_name/overview` | Route-filtered class heatmap; route selector buttons at top; "Radardiagram" button links to `/classes/:class_name/radar` |
 | `ReportHome.jsx` | `/reports` | Lists all sessions (newest first) with test name, class, date, and link to each session report |
-| `SessionReport.jsx` | `/reports/session/:id` | Per-session report with "Per leerling" tab (student dropdown + per-question score table) and "Klassenoverzicht" tab (question × student matrix); excluded questions shown as "n.v.t."; PDF export |
-| `StudentReport.jsx` | `/students/:id/report` | Two tabs: "Voortgang over tijd" (line charts per domain / per pyramid level across sessions) and "Radardiagram" (domain radar + level radar with multi-student overlay selector); PDF export |
+| `SessionReport.jsx` | `/reports/session/:id` | Per-session report with "Per leerling" tab (student dropdown + per-question score table) and "Klassenoverzicht" tab (question × student matrix); excluded questions shown as "n.v.t."; PDF export; pre-selects a student from `?student=` query param; shows learning goal achievement (see Section 6) |
+| `StudentReport.jsx` | `/students/:id/report` | Two tabs: "Voortgang over tijd" (line charts per domain / per pyramid level across sessions) and "Radardiagram" (domain radar + level radar with multi-student overlay selector); PDF export; session rows in the timeline table are clickable and navigate to the session report with the student pre-selected |
 | `ClassRadar.jsx` | `/classes/:class_name/radar` | Domain radar + level radar, one line per route (oranje/geel/blauw) using `ROUTE_COLORS`; PDF export |
 
 `/` redirects to `/students`.
@@ -246,6 +254,18 @@ Students not entered during Q1 are never added to `student_order` and are exclud
 When advancing to the next question — either via **"Volgende vraag"** in the regular flow (`handleNextQuestion`) or when Q1 mode ends (`finishQ1`) — the grading view walks forward past any questions whose `routes` list excludes **every** student in the current stack (`orderedStudents`). For each skipped question, `createExcludedScores()` is called immediately to write excluded-score rows for all stacked students. A Dutch notice banner is then shown for 5 seconds identifying which question(s) were skipped and which routes were missing.
 
 This means the teacher never lands on a dead-end question with zero applicable students. The skip logic uses `orderedStudents` (the Q1-built stack), so students outside the stack are correctly ignored.
+
+### Learning goals
+A question becomes a **learning goal question** when both `learning_goal` (a free-text name) and `learning_goal_threshold` (minimum points) are set. Neither field alone is meaningful — the UI enforces that both are filled or both are empty.
+
+**Grouping:** questions that share the same `learning_goal` string (exact match) belong to the same logical goal. The denominator Y in "X van Y leerdoelen behaald" is the number of *unique goal names* that have at least one applicable question for the student.
+
+**Achievement rule:** a named group is **achieved** when *every* applicable question in the group has a non-null score that is ≥ its `learning_goal_threshold`. Excluded questions (route mismatch) are not counted toward any group; a group with zero applicable questions is not counted at all.
+
+**Display:**
+- `SessionReport.jsx` student view: shows "X van Y leerdoelen behaald" next to the total score; each goal question row shows a `{name} ≥{threshold}` badge and a ✓/✗ indicator.
+- `SessionReport.jsx` class view: per-student goal counts (`X/Y LG`) in column headers; class average above the table; ✓/✗ per student per goal question.
+- `TestEdit.jsx` question list: a blue badge shows `{name} ≥{threshold}` when a goal is configured.
 
 ### Previous scores panel is collapsed by default
 `showPrev` initialises to `false` in `Grade.jsx`. This is intentional: the teacher should not see a student's previous question scores while grading the current question, to avoid anchoring bias. Do not initialise it to `true`.
