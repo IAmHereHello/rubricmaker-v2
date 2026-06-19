@@ -18,6 +18,7 @@ export default function Grade() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
+  const [skipNotice, setSkipNotice] = useState('')
 
   // ── Initial load ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -76,6 +77,13 @@ export default function Grade() {
   const currentStudent = applicableStudents[sIdx]
 
   const scoreKey = (qid, sid) => `${qid}-${sid}`
+
+  // Auto-clear skip notice after 5 seconds
+  useEffect(() => {
+    if (!skipNotice) return
+    const t = setTimeout(() => setSkipNotice(''), 5000)
+    return () => clearTimeout(t)
+  }, [skipNotice])
 
   // Sync input value when student/question changes
   useEffect(() => {
@@ -169,7 +177,32 @@ export default function Grade() {
     await saveOrderIfNeeded()
     await createExcludedScores(currentQuestion, orderedStudents)
 
-    const nextQIdx = qIdx + 1
+    let nextQIdx = qIdx + 1
+    const skippedIndices = []
+
+    // Skip any questions whose routes exclude every student in the current stack.
+    // Create excluded-score rows for those questions (same pattern as non-applicable
+    // students on regular questions) and collect their indices for the notice.
+    while (nextQIdx < test.questions.length) {
+      const q = test.questions[nextQIdx]
+      const applicable = orderedStudents.filter(s => (q.routes || []).includes(s.route))
+      if (applicable.length > 0) break
+      skippedIndices.push(nextQIdx)
+      await createExcludedScores(q, orderedStudents)
+      nextQIdx++
+    }
+
+    if (skippedIndices.length > 0) {
+      const routeNames = [...new Set(
+        skippedIndices.flatMap(qi => test.questions[qi].routes || [])
+      )].join('/')
+      setSkipNotice(
+        skippedIndices.length === 1
+          ? `Vraag ${skippedIndices[0] + 1} overgeslagen: geen leerlingen met route ${routeNames} in de stapel.`
+          : `Vragen ${skippedIndices.map(qi => qi + 1).join(', ')} overgeslagen: geen leerlingen met de betreffende routes in de stapel.`
+      )
+    }
+
     if (nextQIdx >= test.questions.length) {
       setDone(true)
       return
@@ -216,20 +249,20 @@ export default function Grade() {
     )
   }
 
+  // Reached only during initial load before findResumePosition resolves,
+  // or if the entire test has no applicable students at all.
   if (!currentQuestion || !currentStudent) {
-    return (
-      <div className="page">
-        <div className="card">
-          <p className="text-muted">Geen leerlingen gevonden voor deze klas of route.</p>
-          <Link to="/sessions/new" className="btn btn-secondary" style={{ marginTop: 12 }}>Terug</Link>
-        </div>
-      </div>
-    )
+    return <div className="page"><p>Laden...</p></div>
   }
 
   return (
     <div className="page" style={{ maxWidth: 1040, marginLeft: 'auto', marginRight: 'auto' }}>
       {error && <div className="alert alert-error">{error}</div>}
+      {skipNotice && (
+        <div className="alert" style={{ background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 6, padding: '10px 14px', marginBottom: 12, color: '#856404' }}>
+          {skipNotice}
+        </div>
+      )}
 
       {/* Progress bar */}
       <div style={{ background: '#e0e3ea', borderRadius: 6, height: 6, marginBottom: 20 }}>
