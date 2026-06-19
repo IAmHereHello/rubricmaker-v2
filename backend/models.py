@@ -41,6 +41,7 @@ class Question(Base):
     routes = Column(JSON, default=list)        # ["oranje", "geel", "blauw"]
     domain = Column(String, default="")
     pyramid_level = Column(String, nullable=False)  # "reproductie"|"verbinding"|"reflectie"
+    learning_goal_threshold = Column(Integer, nullable=True)  # min points to achieve this learning goal; null = not a goal
 
     test = relationship("Test", back_populates="questions")
     scores = relationship("Score", back_populates="question", cascade="all, delete-orphan")

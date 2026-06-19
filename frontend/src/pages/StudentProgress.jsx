@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
 import RouteBadge from '../components/RouteBadge.jsx'
 import { PYRAMID_LEVELS, pyramidLabel } from '../constants.js'
@@ -15,6 +15,7 @@ function pctColor(pct) {
 
 export default function StudentProgress() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
 
@@ -106,8 +107,14 @@ export default function StudentProgress() {
             </thead>
             <tbody>
               {sessions.map(sess => (
-                <tr key={sess.session_id}>
-                  <td>{new Date(sess.created_at).toLocaleDateString('nl-NL')}</td>
+                <tr key={sess.session_id} style={{ cursor: 'pointer' }}
+                  onClick={() => navigate(`/reports/session/${sess.session_id}?student=${id}`)}
+                >
+                  <td>
+                    <span style={{ color: '#1a6ecc', textDecoration: 'underline' }}>
+                      {new Date(sess.created_at).toLocaleDateString('nl-NL')}
+                    </span>
+                  </td>
                   <td>{sess.class_name}</td>
                   <td>
                     <strong>{sess.total_scored}</strong> / {sess.total_max}

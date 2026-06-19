@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
@@ -24,7 +24,8 @@ function buildLineData(sessions, key) {
   })
 }
 
-function ProgressTab({ sessions }) {
+function ProgressTab({ sessions, studentId }) {
+  const navigate = useNavigate()
   const [sub, setSub] = useState('domain')
 
   if (sessions.length === 0) {
@@ -100,9 +101,11 @@ function ProgressTab({ sessions }) {
           </thead>
           <tbody>
             {sessions.map(sess => (
-              <tr key={sess.session_id}>
+              <tr key={sess.session_id} style={{ cursor: 'pointer' }}
+                onClick={() => navigate(`/reports/session/${sess.session_id}?student=${studentId}`)}
+              >
                 <td>
-                  <div style={{ fontWeight: 500 }}>{sess.test_name}</div>
+                  <div style={{ fontWeight: 500, color: '#1a6ecc', textDecoration: 'underline' }}>{sess.test_name}</div>
                   <div className="text-muted">{new Date(sess.created_at).toLocaleDateString('nl-NL')}</div>
                 </td>
                 {(sub === 'domain' ? DOMAINS : LEVELS).map(k => {
@@ -340,7 +343,7 @@ export default function StudentReport() {
         {tab === 'progress' ? (
           <div className="card">
             <h2 style={{ fontSize: 15, marginBottom: 16 }}>Voortgang over tijd</h2>
-            <ProgressTab sessions={sessions} />
+            <ProgressTab sessions={sessions} studentId={id} />
           </div>
         ) : (
           <RadarTab
