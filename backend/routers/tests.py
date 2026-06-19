@@ -4,7 +4,7 @@ from typing import List
 
 from ..database import get_db
 from ..models import Test
-from ..schemas import TestCreate, TestOut
+from ..schemas import TestCreate, TestUpdate, TestOut
 
 router = APIRouter(prefix="/tests", tags=["tests"])
 
@@ -59,6 +59,17 @@ def get_test(id: int, db: Session = Depends(get_db)):
     if not obj:
         raise HTTPException(404, "Toets niet gevonden")
     return _serialize_test(obj)
+
+
+@router.put("/{id}", response_model=TestOut)
+def update_test(id: int, test: TestUpdate, db: Session = Depends(get_db)):
+    obj = db.query(Test).filter(Test.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Toets niet gevonden")
+    obj.name = test.name
+    db.commit()
+    db.refresh(obj)
+    return obj
 
 
 @router.delete("/{id}")

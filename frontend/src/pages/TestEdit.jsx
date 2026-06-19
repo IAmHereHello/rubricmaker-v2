@@ -1,32 +1,32 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import * as api from '../api.js'
+import { PYRAMID_LEVELS, pyramidLabel, DOMAINS } from '../constants.js'
 
 const ROUTES_ALL = ['oranje', 'geel', 'blauw']
-const PYRAMID_LEVELS = ['reproductie', 'verbinding', 'reflectie']
-const EMPTY_Q = { description: '', answer: '', max_score: 1, routes: ['oranje', 'geel', 'blauw'], domain: '', pyramid_level: 'reproductie' }
+const EMPTY_Q = { description: '', answer: '', max_score: 1, routes: ['oranje', 'geel', 'blauw'], domain: DOMAINS[0], pyramid_level: PYRAMID_LEVELS[0].value }
 
 export default function TestEdit() {
   const { id } = useParams()
   const [test, setTest] = useState(null)
-  const [domains, setDomains] = useState([])
   const [editingQ, setEditingQ] = useState(null)   // null | 'new' | question obj
   const [qForm, setQForm] = useState(EMPTY_Q)
   const [nameEdit, setNameEdit] = useState(false)
   const [testName, setTestName] = useState('')
   const [error, setError] = useState('')
-  const domainRef = useRef(null)
 
   useEffect(() => {
-    Promise.all([api.getTest(id), api.getDomains()])
-      .then(([t, d]) => { setTest(t); setTestName(t.name); setDomains(d) })
+    api.getTest(id)
+      .then(t => { setTest(t); setTestName(t.name) })
       .catch(() => setError('Fout bij laden van toets.'))
   }, [id])
 
   async function saveName() {
+    if (!testName.trim()) { setError('Naam mag niet leeg zijn.'); return }
     try {
-      // Toets naam opslaan via PUT is niet in de API, we updaten lokaal voor nu
-      // Toets aanmaken geeft al de naam mee; een echte update zou hier horen
+      const updated = await api.updateTest(id, { name: testName.trim() })
+      setTest(t => ({ ...t, name: updated.name }))
+      setTestName(updated.name)
       setNameEdit(false)
     } catch { setError('Opslaan mislukt.') }
   }
@@ -62,7 +62,7 @@ export default function TestEdit() {
 
   async function saveQ() {
     if (!qForm.description.trim()) { setError('Omschrijving is verplicht.'); return }
-    if (!qForm.domain.trim()) { setError('Domein is verplicht.'); return }
+    if (!qForm.domain) { setError('Domein is verplicht.'); return }
     if (qForm.routes.length === 0) { setError('Selecteer minimaal één route.'); return }
     try {
       if (editingQ === 'new') {
@@ -72,8 +72,6 @@ export default function TestEdit() {
       }
       const t = await api.getTest(id)
       setTest(t)
-      const d = await api.getDomains()
-      setDomains(d)
       setEditingQ(null)
     } catch { setError('Opslaan mislukt.') }
   }
@@ -166,22 +164,19 @@ export default function TestEdit() {
             <div className="field">
               <label>Niveaulaag (De Lange)</label>
               <select value={qForm.pyramid_level} onChange={e => setQForm(f => ({ ...f, pyramid_level: e.target.value }))}>
-                {PYRAMID_LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
+                {PYRAMID_LEVELS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
               </select>
             </div>
 
-            <div className="field" style={{ position: 'relative' }}>
+            <div className="field">
               <label>Domein</label>
-              <input
-                type="text" ref={domainRef} value={qForm.domain}
-                list="domain-options"
+              <select
+                value={qForm.domain}
                 onChange={e => setQForm(f => ({ ...f, domain: e.target.value }))}
                 style={{ width: 180 }}
-                placeholder="bijv. algebra"
-              />
-              <datalist id="domain-options">
-                {domains.map(d => <option key={d} value={d} />)}
-              </datalist>
+              >
+                {DOMAINS.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
             </div>
           </div>
 
@@ -231,7 +226,7 @@ export default function TestEdit() {
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
                 <span style={{ fontWeight: 700, color: '#888', fontSize: 13 }}>V{idx + 1}</span>
-                <span className={levelClass(q.pyramid_level)}>{q.pyramid_level}</span>
+                <span className={levelClass(q.pyramid_level)}>{pyramidLabel(q.pyramid_level)}</span>
                 <span style={{ fontSize: 12, background: '#f0f3f8', borderRadius: 4, padding: '2px 7px', color: '#555' }}>{q.domain || '—'}</span>
                 <span style={{ marginLeft: 'auto', fontSize: 13, color: '#555' }}>{q.max_score} pt</span>
               </div>

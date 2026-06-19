@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import * as api from '../api.js'
 import RouteBadge from '../components/RouteBadge.jsx'
+import { PYRAMID_LEVELS, pyramidLabel } from '../constants.js'
 
-const LEVELS = ['reproductie', 'verbinding', 'reflectie']
+const LEVELS = PYRAMID_LEVELS.map(l => l.value)
 
 function pctColor(pct) {
   if (pct === null || pct === undefined) return 'cell-empty'
@@ -62,7 +63,7 @@ export default function StudentProgress() {
               <thead>
                 <tr>
                   <th>Domein</th>
-                  {LEVELS.map(l => <th key={l}>{l}</th>)}
+                  {LEVELS.map(l => <th key={l}>{pyramidLabel(l)}</th>)}
                 </tr>
               </thead>
               <tbody>

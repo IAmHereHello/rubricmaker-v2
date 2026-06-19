@@ -26,6 +26,9 @@ class StudentOut(StudentBase):
 class TestCreate(BaseModel):
     name: str
 
+class TestUpdate(BaseModel):
+    name: str
+
 class TestOut(BaseModel):
     id: int
     name: str
