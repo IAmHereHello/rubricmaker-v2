@@ -1,17 +1,16 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { useParams, Link } from 'react-router-dom'
 import * as api from '../api.js'
 import RouteBadge from '../components/RouteBadge.jsx'
 import { pyramidLabel } from '../constants.js'
 
 export default function Grade() {
   const { id } = useParams()
-  const navigate = useNavigate()
 
   const [session, setSession] = useState(null)
   const [test, setTest] = useState(null)
-  const [students, setStudents] = useState([])   // all students in class, alphabetical
-  const [scores, setScores] = useState({})        // key `${questionId}-${studentId}` → score
+  const [students, setStudents] = useState([])
+  const [scores, setScores] = useState({})
   const [qIdx, setQIdx] = useState(0)
   const [sIdx, setSIdx] = useState(0)
   const [inputVal, setInputVal] = useState('')
@@ -20,6 +19,15 @@ export default function Grade() {
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
   const scoreInputRef = useRef(null)
+
+  // Q1 type-select state
+  const [q1Mode, setQ1Mode] = useState(false)
+  const [q1Name, setQ1Name] = useState('')
+  const [q1ScoreVal, setQ1ScoreVal] = useState('')
+  const [q1Saving, setQ1Saving] = useState(false)
+  const q1NameRef = useRef(null)
+  const q1ScoreRef = useRef(null)
+  const prevQ1SelectedId = useRef(null)
 
   // ── Initial load ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -34,28 +42,56 @@ export default function Grade() {
         const scoreMap = {}
         for (const s of sc) scoreMap[`${s.question_id}-${s.student_id}`] = s
 
+        const sortedStuds = [...studs].sort((a, b) => a.name.localeCompare(b.name, 'nl'))
+
         setSession(sess)
         setTest(t)
-        setStudents([...studs].sort((a, b) => a.name.localeCompare(b.name, 'nl')))
+        setStudents(sortedStuds)
         setScores(scoreMap)
 
-        // Find resume position
-        const orderedStuds = getOrderedStudents(sess, studs)
-        const [rqIdx, rsIdx] = findResumePosition(t, orderedStuds, scoreMap)
-        if (rqIdx >= t.questions.length) {
-          setDone(true)
+        if (shouldEnterQ1Mode(sess, t, scoreMap)) {
+          setQ1Mode(true)
         } else {
-          setQIdx(rqIdx)
-          setSIdx(rsIdx)
+          const orderedStuds = getOrderedStudents(sess, sortedStuds)
+          const [rqIdx, rsIdx] = findResumePosition(t, orderedStuds, scoreMap)
+          if (rqIdx >= t.questions.length) {
+            setDone(true)
+          } else {
+            setQIdx(rqIdx)
+            setSIdx(rsIdx)
+          }
         }
-      } catch (e) {
+      } catch {
         setError('Fout bij laden van sessie.')
       }
     }
     load()
   }, [id])
 
-  // ── Derived state ───────────────────────────────────────────────────────────
+  // ── Q1 mode detection ────────────────────────────────────────────────────────
+  // Returns true when we still need to collect the student stack for Q1.
+  function shouldEnterQ1Mode(sess, t, scoreMap) {
+    if (!t?.questions.length) return false
+    const order = sess.student_order || []
+    // Never started Q1 yet
+    if (order.length === 0) return true
+    // If any question beyond Q1 has a score, Q1 collection is finished
+    if (t.questions.length > 1) {
+      const hasPostQ1Scores = t.questions
+        .slice(1)
+        .some(q => Object.keys(scoreMap).some(k => k.startsWith(`${q.id}-`)))
+      return !hasPostQ1Scores
+    }
+    // Single-question test: Q1 mode is done once all ordered students have a score
+    const q1 = t.questions[0]
+    const allScored = order.every(sid => {
+      const sc = scoreMap[`${q1.id}-${sid}`]
+      return sc && (sc.points !== null || sc.excluded)
+    })
+    return !allScored
+  }
+
+  // ── Derived state (regular mode) ─────────────────────────────────────────────
   function getOrderedStudents(sess, studs) {
     if (sess?.student_order?.length) {
       return sess.student_order.map(sid => studs.find(s => s.id === sid)).filter(Boolean)
@@ -79,7 +115,33 @@ export default function Grade() {
 
   const scoreKey = (qid, sid) => `${qid}-${sid}`
 
-  // Sync input value when student/question changes
+  // ── Derived state (Q1 mode) ──────────────────────────────────────────────────
+  const q1AvailableStudents = useMemo(() => {
+    if (!q1Mode || !students.length) return []
+    const addedIds = new Set(session?.student_order || [])
+    return students.filter(s => !addedIds.has(s.id))
+  }, [q1Mode, students, session?.student_order])
+
+  const q1SelectedStudent = useMemo(() => {
+    if (!q1Name.trim()) return null
+    const needle = q1Name.trim().toLowerCase()
+    return q1AvailableStudents.find(s => s.name.toLowerCase() === needle) ?? null
+  }, [q1Name, q1AvailableStudents])
+
+  const q1EnteredList = useMemo(() => {
+    if (!q1Mode || !test) return []
+    const q1 = test.questions[0]
+    return (session?.student_order || [])
+      .map(sid => {
+        const stud = students.find(s => s.id === sid)
+        const sc = scores[scoreKey(q1.id, sid)]
+        return stud ? { id: sid, name: stud.name, points: sc?.points } : null
+      })
+      .filter(Boolean)
+  }, [q1Mode, session?.student_order, students, scores, test])
+
+  // ── Effects ──────────────────────────────────────────────────────────────────
+  // Sync input value when student/question changes (regular mode)
   useEffect(() => {
     if (!currentQuestion || !currentStudent) return
     const existing = scores[scoreKey(currentQuestion.id, currentStudent.id)]
@@ -90,16 +152,30 @@ export default function Grade() {
     )
   }, [qIdx, sIdx, currentQuestion?.id, currentStudent?.id])
 
-  // Auto-focus the score input whenever the current student/question changes,
-  // so the teacher can type immediately without clicking.
+  // Auto-focus score input when student/question changes (regular mode)
   useEffect(() => {
-    if (currentQuestion && currentStudent) {
+    if (!q1Mode && currentQuestion && currentStudent) {
       scoreInputRef.current?.focus()
       scoreInputRef.current?.select()
     }
-  }, [qIdx, sIdx, currentQuestion?.id, currentStudent?.id])
+  }, [q1Mode, qIdx, sIdx, currentQuestion?.id, currentStudent?.id])
 
-  // ── Helpers ─────────────────────────────────────────────────────────────────
+  // Auto-focus name input when Q1 mode activates
+  useEffect(() => {
+    if (q1Mode) q1NameRef.current?.focus()
+  }, [q1Mode])
+
+  // Auto-focus score input when a valid student is selected in Q1 mode
+  useEffect(() => {
+    const newId = q1SelectedStudent?.id ?? null
+    if (newId !== null && newId !== prevQ1SelectedId.current) {
+      q1ScoreRef.current?.focus()
+      q1ScoreRef.current?.select()
+    }
+    prevQ1SelectedId.current = newId
+  }, [q1SelectedStudent?.id])
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
   function findResumePosition(t, ordered, scoreMap) {
     for (let qi = 0; qi < t.questions.length; qi++) {
       const q = t.questions[qi]
@@ -110,13 +186,11 @@ export default function Grade() {
         if (!sc || (sc.points === null && !sc.excluded)) return [qi, si]
       }
     }
-    return [t.questions.length, 0]  // all done
+    return [t.questions.length, 0]
   }
 
   async function persistScore() {
-    if (!currentQuestion || !currentStudent) return
-    if (inputVal === '') return
-
+    if (!currentQuestion || !currentStudent || inputVal === '') return
     const points = parseInt(inputVal, 10)
     if (isNaN(points) || points < 0 || points > currentQuestion.max_score) return
 
@@ -152,32 +226,66 @@ export default function Grade() {
     }
   }
 
-  async function saveOrderIfNeeded() {
-    if (!session.student_order?.length && qIdx === 0) {
-      const order = orderedStudents.map(s => s.id)
-      const updated = await api.setSessionOrder(id, { student_order: order })
-      setSession(updated)
+  // ── Q1 handlers ──────────────────────────────────────────────────────────────
+  async function handleQ1Submit() {
+    if (!q1SelectedStudent || !test?.questions[0]) return
+    const points = parseInt(q1ScoreVal, 10)
+    if (isNaN(points) || points < 0 || points > test.questions[0].max_score) return
+
+    setQ1Saving(true)
+
+    const saved = await api.upsertScore({
+      session_id: parseInt(id),
+      student_id: q1SelectedStudent.id,
+      question_id: test.questions[0].id,
+      points,
+      excluded: false,
+    })
+    setScores(prev => ({ ...prev, [scoreKey(test.questions[0].id, q1SelectedStudent.id)]: saved }))
+
+    const newOrder = [...(session.student_order || []), q1SelectedStudent.id]
+    const updated = await api.setSessionOrder(id, { student_order: newOrder })
+    setSession(updated)
+
+    setQ1Saving(false)
+    setQ1Name('')
+    setQ1ScoreVal('')
+
+    if (newOrder.length >= students.length) {
+      finishQ1()
+    } else {
+      q1NameRef.current?.focus()
     }
   }
 
-  // ── Navigation ──────────────────────────────────────────────────────────────
+  function finishQ1() {
+    setQ1Mode(false)
+    if (test.questions.length <= 1) {
+      setDone(true)
+    } else {
+      setQIdx(1)
+      setSIdx(0)
+    }
+  }
+
+  function handleEndQ1() {
+    if (!(session?.student_order?.length)) return
+    finishQ1()
+  }
+
+  // ── Regular navigation ───────────────────────────────────────────────────────
   async function handlePrev() {
     await persistScore()
-    if (sIdx > 0) {
-      setSIdx(s => s - 1)
-    }
+    if (sIdx > 0) setSIdx(s => s - 1)
   }
 
   async function handleNext() {
     await persistScore()
-    if (sIdx < applicableStudents.length - 1) {
-      setSIdx(s => s + 1)
-    }
+    if (sIdx < applicableStudents.length - 1) setSIdx(s => s + 1)
   }
 
   async function handleNextQuestion() {
     await persistScore()
-    await saveOrderIfNeeded()
     await createExcludedScores(currentQuestion, orderedStudents)
 
     const nextQIdx = qIdx + 1
@@ -189,7 +297,7 @@ export default function Grade() {
     setSIdx(0)
   }
 
-  // ── Previous scores for current student ─────────────────────────────────────
+  // ── Previous scores for sidebar ──────────────────────────────────────────────
   const prevScores = useMemo(() => {
     if (!currentStudent || !test) return []
     return test.questions.slice(0, qIdx).map((q, i) => {
@@ -197,14 +305,17 @@ export default function Grade() {
       return {
         nr: i + 1,
         domain: q.domain,
-        pyramid_level: q.pyramid_level,
         max_score: q.max_score,
-        points: sc?.excluded ? 'n.v.t.' : (sc?.points !== null && sc?.points !== undefined ? sc.points : '—'),
+        points: sc?.excluded
+          ? 'n.v.t.'
+          : sc?.points !== null && sc?.points !== undefined
+          ? sc.points
+          : '—',
       }
     })
   }, [currentStudent?.id, qIdx, scores, test])
 
-  // ── Render helpers ──────────────────────────────────────────────────────────
+  // ── Render ───────────────────────────────────────────────────────────────────
   const isLastStudent = sIdx === applicableStudents.length - 1
   const isLastQuestion = qIdx === test?.questions.length - 1
 
@@ -227,6 +338,157 @@ export default function Grade() {
     )
   }
 
+  // ── Q1 type-select render ────────────────────────────────────────────────────
+  if (q1Mode) {
+    const q1 = test.questions[0]
+    const enteredCount = session?.student_order?.length || 0
+    const totalCount = students.length
+
+    return (
+      <div className="page" style={{ maxWidth: 1040, marginLeft: 'auto', marginRight: 'auto' }}>
+        {error && <div className="alert alert-error">{error}</div>}
+
+        <div style={{ background: '#e0e3ea', borderRadius: 6, height: 6, marginBottom: 20 }}>
+          <div style={{
+            background: '#1e3a5f',
+            borderRadius: 6,
+            height: 6,
+            width: `${(enteredCount / Math.max(totalCount, 1) / test.questions.length) * 100}%`,
+            transition: 'width .3s',
+          }} />
+        </div>
+
+        <div className="grade-wrap">
+          <div className="grade-main">
+            <div className="grade-question-box">
+              <div className="grade-question-label">
+                Vraag 1 · {q1.domain} · {pyramidLabel(q1.pyramid_level)} · max {q1.max_score} pt
+              </div>
+              <div className="grade-question-desc">{q1.description}</div>
+              {q1.answer && (
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#888', marginBottom: 4 }}>Modelantwoord</div>
+                  <div className="grade-answer">{q1.answer}</div>
+                </div>
+              )}
+            </div>
+
+            {/* Name input */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#555', marginBottom: 6 }}>
+                Naam leerling
+                <span className="text-muted" style={{ fontWeight: 400, marginLeft: 8 }}>
+                  ({enteredCount} van {totalCount} ingevoerd)
+                </span>
+              </div>
+              <input
+                ref={q1NameRef}
+                type="text"
+                list="q1-student-list"
+                value={q1Name}
+                onChange={e => setQ1Name(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Escape') { setQ1Name(''); setQ1ScoreVal('') }
+                }}
+                placeholder="Begin met typen om een leerling te zoeken…"
+                style={{ width: '100%', fontSize: 15, padding: '9px 12px' }}
+                autoComplete="off"
+              />
+              <datalist id="q1-student-list">
+                {q1AvailableStudents.map(s => <option key={s.id} value={s.name} />)}
+              </datalist>
+            </div>
+
+            {/* Score entry — only shown when a valid student name is matched */}
+            <div style={{ minHeight: 56, marginBottom: 28 }}>
+              {q1SelectedStudent && (
+                <div className="grade-score-row">
+                  <span style={{ fontSize: 16, fontWeight: 700, color: '#1e3a5f' }}>
+                    {q1SelectedStudent.name}
+                  </span>
+                  <RouteBadge route={q1SelectedStudent.route} />
+                  <input
+                    ref={q1ScoreRef}
+                    type="number"
+                    className="grade-score-input"
+                    min={0}
+                    max={q1.max_score}
+                    value={q1ScoreVal}
+                    onChange={e => setQ1ScoreVal(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleQ1Submit() }}
+                  />
+                  <span className="grade-score-max">/ {q1.max_score}</span>
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleQ1Submit}
+                    disabled={q1Saving || q1ScoreVal === ''}
+                  >
+                    {q1Saving ? 'Opslaan…' : 'Opslaan →'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Already-entered students */}
+            {q1EnteredList.length > 0 && (
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 8 }}>
+                  Ingevoerd
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {q1EnteredList.map(item => (
+                    <div key={item.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '4px 10px', background: '#f0f3f8', borderRadius: 6, fontSize: 13,
+                    }}>
+                      <span>{item.name}</span>
+                      <span style={{ fontWeight: 700, color: '#1e3a5f' }}>{item.points}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* End-of-stack button */}
+            <div style={{ borderTop: '1px solid #e0e3ea', paddingTop: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button
+                className="btn btn-secondary"
+                onClick={handleEndQ1}
+                disabled={enteredCount === 0}
+                title="Stop met invoeren en ga verder met de volgende vraag"
+              >
+                Einde van de stapel
+              </button>
+              <span className="text-muted" style={{ fontSize: 12 }}>
+                Niet-ingevoerde leerlingen worden overgeslagen in deze sessie.
+              </span>
+            </div>
+          </div>
+
+          {/* Sidebar */}
+          <div className="grade-sidebar">
+            <div className="card" style={{ fontSize: 13 }}>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>{test.name}</div>
+              <div className="text-muted">Klas {session.class_name}</div>
+              <hr className="divider" />
+              {test.questions.map((q, i) => (
+                <div key={q.id} style={{
+                  padding: '3px 0',
+                  color: i === 0 ? '#1e3a5f' : '#aaa',
+                  fontWeight: i === 0 ? 700 : 400,
+                  fontSize: 13,
+                }}>
+                  {i === 0 ? '▶ ' : '  '}V{i + 1} {q.domain}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Regular grading render (Q2+) ─────────────────────────────────────────────
   if (!currentQuestion || !currentStudent) {
     return (
       <div className="page">
@@ -242,7 +504,6 @@ export default function Grade() {
     <div className="page" style={{ maxWidth: 1040, marginLeft: 'auto', marginRight: 'auto' }}>
       {error && <div className="alert alert-error">{error}</div>}
 
-      {/* Progress bar */}
       <div style={{ background: '#e0e3ea', borderRadius: 6, height: 6, marginBottom: 20 }}>
         <div style={{
           background: '#1e3a5f',
@@ -254,7 +515,6 @@ export default function Grade() {
       </div>
 
       <div className="grade-wrap">
-        {/* ── Main grading panel ── */}
         <div className="grade-main">
           <div className="grade-student-name">{currentStudent.name}</div>
           <div style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -264,7 +524,6 @@ export default function Grade() {
             </span>
           </div>
 
-          {/* Question */}
           <div className="grade-question-box">
             <div className="grade-question-label">
               Vraag {qIdx + 1} · {currentQuestion.domain} · {pyramidLabel(currentQuestion.pyramid_level)} · max {currentQuestion.max_score} pt
@@ -278,7 +537,6 @@ export default function Grade() {
             )}
           </div>
 
-          {/* Score input */}
           <div className="grade-score-row">
             <input
               ref={scoreInputRef}
@@ -299,7 +557,6 @@ export default function Grade() {
             {saving && <span className="text-muted">Opslaan...</span>}
           </div>
 
-          {/* Navigation */}
           <div className="grade-nav-buttons">
             <button className="btn btn-secondary" onClick={handlePrev} disabled={sIdx === 0 && qIdx === 0}>
               ← Vorige leerling
@@ -325,13 +582,9 @@ export default function Grade() {
           </div>
         </div>
 
-        {/* ── Sidebar: previous scores ── */}
         <div className="grade-sidebar">
           <div>
-            <div
-              className="collapsible-header"
-              onClick={() => setShowPrev(v => !v)}
-            >
+            <div className="collapsible-header" onClick={() => setShowPrev(v => !v)}>
               <span>Vorige scores {currentStudent.name}</span>
               <span>{showPrev ? '▲' : '▼'}</span>
             </div>
@@ -365,7 +618,6 @@ export default function Grade() {
             )}
           </div>
 
-          {/* Quick session info */}
           <div className="card" style={{ fontSize: 13 }}>
             <div style={{ fontWeight: 700, marginBottom: 6 }}>{test.name}</div>
             <div className="text-muted">Klas {session.class_name}</div>

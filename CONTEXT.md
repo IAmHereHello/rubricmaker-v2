@@ -205,8 +205,16 @@ The database stores stable short codes (`"reproductie"`, `"verbinding"`, `"refle
 ### Domain list
 The business owner works with a fixed set of domains: **Algebra, Meetkunde, Rekenen, Statistiek**, defined as `DOMAINS` in `constants.js`. The test builder uses a fixed `<select>` of exactly these four values (no freeform input). There is no `/questions/domains` endpoint — it was removed once the domain became a fixed list.
 
-### Grading order
-On question 1, students appear alphabetically (`localeCompare('nl')`). The exact order the teacher steps through is saved as `session.student_order` when they advance past the last student on Q1 (via `saveOrderIfNeeded()` in `Grade.jsx`). From question 2 onward, `getOrderedStudents()` uses `session.student_order` if it is non-empty. Do not change this logic — it allows the teacher to control grading order on the first question.
+### Grading order — Q1 type-to-select
+Question 1 uses a **type-to-select** flow instead of alphabetical stepping. `Grade.jsx` detects "Q1 mode" on load via `shouldEnterQ1Mode()` and renders a completely different UI: a text input with `<datalist>` autocomplete suggesting all students in the class not yet entered. The teacher picks up each paper, types the student name, enters their Q1 score, and presses Enter/clicks "Opslaan →". Each submission appends the student ID to `session.student_order` (incremental `PUT /sessions/{id}/order` calls) and saves the score. The input then clears and re-focuses for the next student.
+
+Q1 mode ends when:
+- All students in the class have been entered (auto-detected), or
+- The teacher clicks **"Einde van de stapel"** (requires at least one student entered).
+
+Students not entered during Q1 are never added to `student_order` and are excluded from the session entirely. Once Q1 mode ends, `student_order` is final. From Q2 onward, `getOrderedStudents()` maps `session.student_order` to the student objects — the same fixed-order next/previous flow as before.
+
+**Resume detection** (`shouldEnterQ1Mode`): if `student_order` is empty → Q1 mode. If any Q2+ question has a score in `scoreMap` → Q1 is done, regular resume. For single-question tests: Q1 mode until all ordered students have a non-null score. This avoids a DB migration for a "Q1 complete" flag.
 
 ### Previous scores panel is collapsed by default
 `showPrev` initialises to `false` in `Grade.jsx`. This is intentional: the teacher should not see a student's previous question scores while grading the current question, to avoid anchoring bias. Do not initialise it to `true`.
@@ -231,7 +239,7 @@ A `Test` and its `Question`s are never modified during a session. Multiple sessi
 
 ### Sensitive areas that have been touched before
 
-- **Grading order** — previously had a bug where Q2+ used alphabetical order instead of the saved `student_order`. The fix is `getOrderedStudents()` checking `sess.student_order?.length`. Be careful not to regress this.
+- **Grading order** — Q1 now uses type-to-select (see Section 6). `shouldEnterQ1Mode()` in `Grade.jsx` detects whether to render the Q1 input UI or the regular flow. The original bug (Q2+ used alphabetical instead of saved order) is still fixed via `getOrderedStudents()` checking `sess.student_order?.length`. Do not regress either.
 - **Autofocus on score input** — the score number input keeps its `autoFocus` attribute (initial mount) **and** a `scoreInputRef` + `useEffect` that re-focuses and selects the input whenever the current question/student changes, so the teacher can type immediately when switching students. Removing either breaks keyboard-first grading. The input also handles `Enter` (advance), `ArrowRight` (advance), and `ArrowLeft` (go back).
 - **Resume position on page load** — `findResumePosition()` in `Grade.jsx` scans questions and applicable students to find the first entry without a completed score, so a session can be resumed after closing the browser. Do not replace this with always starting at Q1/S1.
 
