@@ -64,10 +64,10 @@ description    String   not null
 answer         String   default ""  (model answer shown during grading)
 max_score      Integer  not null
 routes         JSON     default []  — subset of ["oranje", "geel", "blauw"]
-domain         String   default ""  (skill area, e.g. "algebra")
+domain         String   default ""  — one of: "Algebra" | "Meetkunde" | "Rekenen" | "Statistiek"
 pyramid_level  String   not null    — one of: "reproductie" | "verbinding" | "reflectie"
 ```
-**Important — see Section 6:** `pyramid_level` currently stores short codes. The intended values are different; see the business rules section.
+**`pyramid_level`** stores stable short codes; the UI displays the De Lange labels via a code→label mapping (see Section 6). The codes are never shown to the user directly.
 Relationships: belongs to `Test`, has many `Score` (cascade delete).
 
 ### Session
@@ -114,14 +114,12 @@ All routers are registered in `backend/main.py`. CORS is open (`allow_origins=["
 | GET | `/tests` | List all tests, newest first |
 | POST | `/tests` | Create a test |
 | GET | `/tests/{id}` | Get a test with its questions sorted by `order` |
+| PUT | `/tests/{id}` | Update a test's name (used by the rename pencil in `TestEdit.jsx`) |
 | DELETE | `/tests/{id}` | Delete a test (cascades to questions and sessions) |
-
-Note: there is **no PUT /tests/{id}**. Renaming a test via the UI edit pencil is not currently wired to an API call (see Section 7).
 
 ### `/questions` — `backend/routers/questions.py`
 | Method | Path | Description |
 |---|---|---|
-| GET | `/questions/domains` | Return sorted list of all distinct non-empty domain strings in the DB |
 | POST | `/questions` | Create a question |
 | PUT | `/questions/reorder` | Batch-update `order` field; body is `[{question_id, order}, ...]` |
 | PUT | `/questions/{id}` | Update a question (partial, uses `exclude_unset=True`) |
@@ -163,7 +161,7 @@ Source: `frontend/src/App.jsx`. Router is `BrowserRouter`. All API calls go thro
 |---|---|---|
 | `Students.jsx` | `/students` | List students grouped by class; inline add/edit form; links to class overview and student progress |
 | `TestList.jsx` | `/tests` | List tests with create-and-redirect form |
-| `TestEdit.jsx` | `/tests/:id/edit` | Add/edit/delete/reorder questions for a test; domain uses `<datalist>` autocomplete |
+| `TestEdit.jsx` | `/tests/:id/edit` | Add/edit/delete/reorder questions for a test; rename test via pencil; domain and pyramid level are fixed `<select>` dropdowns |
 | `SessionNew.jsx` | `/sessions/new` | Pick a test and class, then navigate to grading view |
 | `Grade.jsx` | `/sessions/:id/grade` | Main grading view (see Section 6 for flow details) |
 | `StudentProgress.jsx` | `/students/:id/progress` | Domain × pyramid heatmap + per-session score table for one student |
@@ -175,11 +173,15 @@ Source: `frontend/src/App.jsx`. Router is `BrowserRouter`. All API calls go thro
 
 - `components/RouteBadge.jsx` — renders a coloured badge (`badge-oranje`, `badge-geel`, `badge-blauw`) for a route string.
 
+### Shared Constants
+
+- `constants.js` — single source of truth for `PYRAMID_LEVELS` (array of `{ value, label }`, where `value` is the stored code and `label` the De Lange display label), the `pyramidLabel(value)` helper, and `DOMAINS` (the fixed four-domain list). Imported by `TestEdit.jsx`, `Grade.jsx`, `StudentProgress.jsx`, and `ClassOverview.jsx`.
+
 ### Styling
 
 Single file: `frontend/src/index.css`. No UI library. Key CSS classes:
 - `.badge-oranje / .badge-geel / .badge-blauw` — route badge colours
-- `.level-reproductie / .level-verbinding / .level-reflectie` — pyramid level pill colours
+- `.level-reproductie / .level-verbinding / .level-reflectie` — pyramid level pill colours (keyed by the stored code, not the display label)
 - `.cell-green / .cell-orange / .cell-red / .cell-empty` — heatmap cell colours (≥75%, 55–74%, <55%, no data)
 - `.grade-wrap` — two-column grid layout for the grading view (main panel + sidebar)
 
@@ -192,18 +194,16 @@ A question's `routes` field lists which learning routes it applies to. If a stud
 
 In the grading view (`Grade.jsx`), `applicableStudents` is computed by filtering `orderedStudents` to only those whose route is in `currentQuestion.routes`. The grading flow only navigates through applicable students. When the teacher advances to the next question, `createExcludedScores()` is called to write excluded score records for the non-applicable students.
 
-### Pyramid level labels — NEEDS UPDATE
+### Pyramid level labels (De Lange model)
 The business owner uses De Lange's pyramid model with these three exact labels:
 - **Niveau 1:** "Reproduceren"
 - **Niveau 2:** "Wiskundig gereedschap kiezen"
 - **Niveau 3:** "Generaliseren"
 
-**The current code does not yet use these labels.** It stores and displays `"reproductie"`, `"verbinding"`, and `"reflectie"` instead. This must be updated consistently everywhere: the `PYRAMID_LEVELS` constant in `TestEdit.jsx`, the `pyramid_level` values stored in the database, the pill CSS classes and their display in the test builder and grading view, and the column headers in the progress/overview heatmaps. Any migration also needs to handle existing database rows.
+The database stores stable short codes (`"reproductie"`, `"verbinding"`, `"reflectie"`); the UI maps each code to its De Lange label via `PYRAMID_LEVELS` / `pyramidLabel()` in `constants.js`. This keeps the `.level-*` pill CSS classes and the `domain|level` heatmap keys keyed on the codes, so **no database migration is needed**. The label mapping is applied everywhere the level is shown: the test builder dropdown and list pill, the grading view, and the progress/overview heatmap headers. If you ever change a code, update the constant, the matching `.level-*` CSS class, and remember existing rows still hold the old code.
 
-### Domain list — NEEDS UPDATE
-The business owner works with a fixed set of domains: **Algebra, Meetkunde, Rekenen, Statistiek**.
-
-**The current code treats domain as freeform text** with a `<datalist>` autocomplete fed by `/questions/domains`. This must be changed to a fixed `<select>` dropdown containing exactly these four values. The `/questions/domains` endpoint can be removed once that change is made.
+### Domain list
+The business owner works with a fixed set of domains: **Algebra, Meetkunde, Rekenen, Statistiek**, defined as `DOMAINS` in `constants.js`. The test builder uses a fixed `<select>` of exactly these four values (no freeform input). There is no `/questions/domains` endpoint — it was removed once the domain became a fixed list.
 
 ### Grading order
 On question 1, students appear alphabetically (`localeCompare('nl')`). The exact order the teacher steps through is saved as `session.student_order` when they advance past the last student on Q1 (via `saveOrderIfNeeded()` in `Grade.jsx`). From question 2 onward, `getOrderedStudents()` uses `session.student_order` if it is non-empty. Do not change this logic — it allows the teacher to control grading order on the first question.
@@ -221,18 +221,18 @@ A `Test` and its `Question`s are never modified during a session. Multiple sessi
 
 ## 7. Known Issues and Sensitive Areas
 
-### Not yet implemented / broken
+### Recently fixed (kept here so the fixes are not accidentally reverted)
 
-1. **Pyramid level labels** (Section 6): stored as `"reproductie"`, `"verbinding"`, `"reflectie"` instead of the intended De Lange labels. Both the frontend constants and any existing database rows need to be migrated.
+1. **Pyramid level labels** (Section 6): the UI now shows the De Lange labels via the `pyramidLabel()` mapping in `constants.js`, while the DB keeps the short codes. Do not reintroduce the raw codes into the UI.
 
-2. **Domain is freeform** (Section 6): the test builder uses a free text input with `<datalist>` autocomplete. It should be a `<select>` with a fixed list of four options.
+2. **Domain list** (Section 6): now a fixed four-option `<select>` driven by `DOMAINS` in `constants.js`; the `/questions/domains` endpoint was removed. Do not revert to freeform text.
 
-3. **Test renaming is not saved**: `TestEdit.jsx` shows an edit pencil that opens a name input, but the `saveName()` function does not call any API endpoint (there is no `PUT /tests/{id}` route). The UI is cosmetic only. Either add the endpoint or remove the pencil button.
+3. **Test renaming** now works: `PUT /tests/{id}` exists and `saveName()` in `TestEdit.jsx` calls `api.updateTest()` and updates local state.
 
 ### Sensitive areas that have been touched before
 
 - **Grading order** — previously had a bug where Q2+ used alphabetical order instead of the saved `student_order`. The fix is `getOrderedStudents()` checking `sess.student_order?.length`. Be careful not to regress this.
-- **Autofocus on score input** — the `autoFocus` attribute on the score number input is intentional. Removing it breaks keyboard-first grading. The input also handles `Enter` (advance), `ArrowRight` (advance), and `ArrowLeft` (go back).
+- **Autofocus on score input** — the score number input keeps its `autoFocus` attribute (initial mount) **and** a `scoreInputRef` + `useEffect` that re-focuses and selects the input whenever the current question/student changes, so the teacher can type immediately when switching students. Removing either breaks keyboard-first grading. The input also handles `Enter` (advance), `ArrowRight` (advance), and `ArrowLeft` (go back).
 - **Resume position on page load** — `findResumePosition()` in `Grade.jsx` scans questions and applicable students to find the first entry without a completed score, so a session can be resumed after closing the browser. Do not replace this with always starting at Q1/S1.
 
 ---

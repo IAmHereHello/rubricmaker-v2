@@ -9,12 +9,6 @@ from ..schemas import QuestionCreate, QuestionUpdate, QuestionOut, QuestionReord
 router = APIRouter(prefix="/questions", tags=["questions"])
 
 
-@router.get("/domains")
-def list_domains(db: Session = Depends(get_db)):
-    rows = db.query(Question.domain).filter(Question.domain != "").distinct().all()
-    return sorted({r[0] for r in rows if r[0]})
-
-
 @router.post("", response_model=QuestionOut)
 def create_question(question: QuestionCreate, db: Session = Depends(get_db)):
     obj = Question(**question.model_dump())

@@ -21,11 +21,11 @@ export const createTest = (data) => http.post('/tests', data).then(r => r.data)
 
 export const getTest = (id) => http.get(`/tests/${id}`).then(r => r.data)
 
+export const updateTest = (id, data) => http.put(`/tests/${id}`, data).then(r => r.data)
+
 export const deleteTest = (id) => http.delete(`/tests/${id}`).then(r => r.data)
 
 // ── Questions ─────────────────────────────────────────────────────────────────
-
-export const getDomains = () => http.get('/questions/domains').then(r => r.data)
 
 export const createQuestion = (data) => http.post('/questions', data).then(r => r.data)
 

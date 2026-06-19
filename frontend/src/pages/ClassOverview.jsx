@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import * as api from '../api.js'
+import { pyramidLabel } from '../constants.js'
 
 const ROUTES = ['oranje', 'geel', 'blauw']
 
@@ -71,7 +72,7 @@ export default function ClassOverview() {
                     {data.domain_pyramid_keys.map(k => (
                       <th key={`${k.domain}|${k.pyramid_level}`} style={{ minWidth: 90, textAlign: 'center', fontWeight: 600 }}>
                         <div>{k.domain}</div>
-                        <div style={{ fontWeight: 400, fontSize: 11, textTransform: 'none', letterSpacing: 0 }}>{k.pyramid_level}</div>
+                        <div style={{ fontWeight: 400, fontSize: 11, textTransform: 'none', letterSpacing: 0 }}>{pyramidLabel(k.pyramid_level)}</div>
                       </th>
                     ))}
                   </tr>

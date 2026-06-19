@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import * as api from '../api.js'
 import RouteBadge from '../components/RouteBadge.jsx'
+import { pyramidLabel } from '../constants.js'
 
 export default function Grade() {
   const { id } = useParams()
@@ -18,6 +19,7 @@ export default function Grade() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
+  const scoreInputRef = useRef(null)
 
   // ── Initial load ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -86,6 +88,15 @@ export default function Grade() {
         ? String(existing.points)
         : ''
     )
+  }, [qIdx, sIdx, currentQuestion?.id, currentStudent?.id])
+
+  // Auto-focus the score input whenever the current student/question changes,
+  // so the teacher can type immediately without clicking.
+  useEffect(() => {
+    if (currentQuestion && currentStudent) {
+      scoreInputRef.current?.focus()
+      scoreInputRef.current?.select()
+    }
   }, [qIdx, sIdx, currentQuestion?.id, currentStudent?.id])
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -256,7 +267,7 @@ export default function Grade() {
           {/* Question */}
           <div className="grade-question-box">
             <div className="grade-question-label">
-              Vraag {qIdx + 1} · {currentQuestion.domain} · {currentQuestion.pyramid_level} · max {currentQuestion.max_score} pt
+              Vraag {qIdx + 1} · {currentQuestion.domain} · {pyramidLabel(currentQuestion.pyramid_level)} · max {currentQuestion.max_score} pt
             </div>
             <div className="grade-question-desc">{currentQuestion.description}</div>
             {currentQuestion.answer && (
@@ -270,6 +281,7 @@ export default function Grade() {
           {/* Score input */}
           <div className="grade-score-row">
             <input
+              ref={scoreInputRef}
               type="number"
               className="grade-score-input"
               min={0}
