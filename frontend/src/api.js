@@ -60,3 +60,17 @@ export const getStudentProgress = (student_id) =>
 
 export const getClassProgress = (class_name, route) =>
   http.get(`/progress/class/${encodeURIComponent(class_name)}/${route}`).then(r => r.data)
+
+// ── Reports ───────────────────────────────────────────────────────────────────
+
+export const getSessionReport = (session_id) =>
+  http.get(`/reports/session/${session_id}`).then(r => r.data)
+
+export const getStudentTimeline = (student_id) =>
+  http.get(`/reports/student/${student_id}/timeline`).then(r => r.data)
+
+export const getStudentRadar = (student_id) =>
+  http.get(`/reports/student/${student_id}/radar`).then(r => r.data)
+
+export const getClassRadar = (class_name) =>
+  http.get(`/reports/class/${encodeURIComponent(class_name)}/radar`).then(r => r.data)

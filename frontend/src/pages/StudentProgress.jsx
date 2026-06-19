@@ -47,7 +47,10 @@ export default function StudentProgress() {
             <span className="text-muted">Klas {student.class_name}</span>
           </div>
         </div>
-        <Link to="/students" className="btn btn-secondary">← Terug</Link>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <Link to={`/students/${id}/report`} className="btn btn-secondary">Rapport & Radar</Link>
+          <Link to="/students" className="btn btn-secondary">← Terug</Link>
+        </div>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}

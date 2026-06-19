@@ -31,7 +31,10 @@ export default function ClassOverview() {
     <div className="page">
       <div className="page-header">
         <h1>Klasoverzicht — {class_name}</h1>
-        <Link to="/students" className="btn btn-secondary">← Terug</Link>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <Link to={`/classes/${class_name}/radar`} className="btn btn-secondary">Radardiagram</Link>
+          <Link to="/students" className="btn btn-secondary">← Terug</Link>
+        </div>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}

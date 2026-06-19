@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .database import engine
 from . import models
-from .routers import students, tests, questions, sessions, scores, progress
+from .routers import students, tests, questions, sessions, scores, progress, reports
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -23,6 +23,7 @@ app.include_router(questions.router)
 app.include_router(sessions.router)
 app.include_router(scores.router)
 app.include_router(progress.router)
+app.include_router(reports.router)
 
 
 @app.get("/")

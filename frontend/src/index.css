@@ -392,3 +392,14 @@ tr:hover td { background: #fafbfd; }
   padding: 48px 24px;
 }
 .session-done h2 { font-size: 24px; margin-bottom: 12px; color: #1e3a5f; }
+
+/* ── Reports ──────────────────────────────────────────────────────────────── */
+.report-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 700px) {
+  .report-grid-2 { grid-template-columns: 1fr; }
+}

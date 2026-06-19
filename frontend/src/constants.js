@@ -14,3 +14,17 @@ export const pyramidLabel = (value) =>
 
 // Fixed set of domains the teacher works with.
 export const DOMAINS = ['Algebra', 'Meetkunde', 'Rekenen', 'Statistiek']
+
+// Convenience aliases used by the report pages.
+export const LEVELS = PYRAMID_LEVELS.map(l => l.value)
+export const LEVEL_LABELS = Object.fromEntries(PYRAMID_LEVELS.map(l => [l.value, l.label]))
+
+export const ROUTE_COLORS = {
+  oranje: '#e07820',
+  geel: '#a08b00',
+  blauw: '#1a6ecc',
+}
+
+export const STUDENT_COLORS = [
+  '#1e3a5f', '#059669', '#dc2626', '#7c3aed', '#0891b2', '#d97706', '#be185d',
+]
