@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session as DBSession
 from typing import List
 
 from ..database import get_db
-from ..models import Session as SessionModel, Score, Test as TestModel
+from ..models import Session as SessionModel, Score, Test as TestModel, Student as StudentModel
 from ..schemas import SessionCreate, SessionOut, SessionListOut, SessionOrderUpdate
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -15,18 +15,35 @@ def list_sessions(db: DBSession = Depends(get_db)):
     result = []
     for s in sessions:
         test = db.query(TestModel).filter(TestModel.id == s.test_id).first()
-        applicable = db.query(Score).filter(
-            Score.session_id == s.id, Score.excluded.is_(False)
-        ).all()
-        total = len(applicable)
-        graded = sum(1 for sc in applicable if sc.points is not None)
+        order = s.student_order or []
+
+        if not order:
+            # Q1 not yet started — session exists but no stack built yet
+            total = 0
+            graded = 0
+        else:
+            # Compute expected graded scores: for each question, count students
+            # in the session whose route is in the question's routes list.
+            stud_rows = db.query(StudentModel).filter(StudentModel.id.in_(order)).all()
+            route_map = {st.id: st.route for st in stud_rows}
+            questions = test.questions if test else []
+            total = sum(
+                sum(1 for sid in order if route_map.get(sid) in (q.routes or []))
+                for q in questions
+            )
+            graded = db.query(Score).filter(
+                Score.session_id == s.id,
+                Score.excluded.is_(False),
+                Score.points.isnot(None),
+            ).count()
+
         result.append(SessionListOut(
             id=s.id,
             test_id=s.test_id,
             test_name=test.name if test else "Onbekende toets",
             class_name=s.class_name,
             created_at=s.created_at,
-            student_order=s.student_order or [],
+            student_order=order,
             graded_count=graded,
             total_count=total,
         ))
