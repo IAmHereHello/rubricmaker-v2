@@ -99,6 +99,16 @@ class SessionOut(BaseModel):
     student_order: List[int]
     model_config = {"from_attributes": True}
 
+class SessionListOut(BaseModel):
+    id: int
+    test_id: int
+    test_name: str
+    class_name: str
+    created_at: datetime
+    student_order: List[int]
+    graded_count: int
+    total_count: int
+
 class SessionOrderUpdate(BaseModel):
     student_order: List[int]
 

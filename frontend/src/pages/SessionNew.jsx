@@ -1,21 +1,25 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import * as api from '../api.js'
 
 export default function SessionNew() {
   const [tests, setTests] = useState([])
   const [students, setStudents] = useState([])
+  const [sessions, setSessions] = useState([])
   const [testId, setTestId] = useState('')
   const [className, setClassName] = useState('')
   const [error, setError] = useState('')
   const navigate = useNavigate()
 
   useEffect(() => {
-    Promise.all([api.getTests(), api.getStudents()]).then(([t, s]) => {
-      setTests(t)
-      setStudents(s)
-      if (t.length) setTestId(String(t[0].id))
-    }).catch(() => setError('Fout bij laden van gegevens.'))
+    Promise.all([api.getTests(), api.getStudents(), api.getSessions()])
+      .then(([t, s, sess]) => {
+        setTests(t)
+        setStudents(s)
+        setSessions(sess)
+        if (t.length) setTestId(String(t[0].id))
+      })
+      .catch(() => setError('Fout bij laden van gegevens.'))
   }, [])
 
   const classes = [...new Set(students.map(s => s.class_name))].sort()
@@ -23,6 +27,10 @@ export default function SessionNew() {
   useEffect(() => {
     if (classes.length && !className) setClassName(classes[0])
   }, [classes.join(',')])
+
+  const inProgress = sessions.filter(s =>
+    s.total_count === 0 || s.graded_count < s.total_count
+  )
 
   async function start() {
     if (!testId || !className) { setError('Selecteer een toets en een klas.'); return }
@@ -40,7 +48,56 @@ export default function SessionNew() {
 
       {error && <div className="alert alert-error">{error}</div>}
 
+      {inProgress.length > 0 && (
+        <div className="card" style={{ marginBottom: 24 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 14, color: '#1e3a5f' }}>
+            Lopende sessies
+          </h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Datum</th>
+                <th>Toets</th>
+                <th>Klas</th>
+                <th>Voortgang</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {inProgress.map(sess => {
+                const progressLabel = sess.total_count === 0
+                  ? 'Nog niet gestart'
+                  : `${sess.graded_count} / ${sess.total_count} beoordeeld`
+                return (
+                  <tr key={sess.id}>
+                    <td>{new Date(sess.created_at).toLocaleDateString('nl-NL')}</td>
+                    <td>{sess.test_name}</td>
+                    <td>{sess.class_name}</td>
+                    <td>
+                      <span style={{ color: sess.total_count === 0 ? '#888' : '#c07000', fontSize: 13 }}>
+                        {progressLabel}
+                      </span>
+                    </td>
+                    <td>
+                      <Link
+                        to={`/sessions/${sess.id}/grade`}
+                        className="btn btn-primary btn-sm"
+                      >
+                        Hervat →
+                      </Link>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <div className="card" style={{ maxWidth: 480 }}>
+        <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16, color: '#1e3a5f' }}>
+          Nieuwe sessie
+        </h2>
         <div className="field" style={{ marginBottom: 16 }}>
           <label>Toets</label>
           <select value={testId} onChange={e => setTestId(e.target.value)}>

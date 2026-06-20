@@ -143,7 +143,7 @@ All routers are registered in `backend/main.py`. CORS is open (`allow_origins=["
 ### `/sessions` — `backend/routers/sessions.py`
 | Method | Path | Description |
 |---|---|---|
-| GET | `/sessions` | List all sessions, newest first |
+| GET | `/sessions` | List all sessions, newest first; each item includes `test_name`, `graded_count`, and `total_count` (non-excluded scores) |
 | POST | `/sessions` | Create a session (initialises `student_order` to `[]`) |
 | GET | `/sessions/{id}` | Get session + all its scores in one response |
 | PUT | `/sessions/{id}/order` | Set or replace the session's `student_order` |
@@ -172,6 +172,9 @@ Both progress endpoints filter out excluded scores and scores where `points IS N
 
 All report endpoints apply the same route-exclusion logic as the rest of the app: excluded and ungraded scores are ignored; axes with zero applicable questions yield `pct: null`, not `pct: 0`.
 
+### In-progress session detection
+A session is considered **in-progress** (shown in "Lopende sessies") when `total_count === 0` (just created, Q1 not yet started) or `graded_count < total_count` (grading underway but not finished). A session where `graded_count === total_count > 0` is complete and no longer shown. `SessionListOut` in `schemas.py` carries the extra fields; the individual-session endpoints still use `SessionOut`.
+
 ### Schema migrations (`backend/main.py`)
 `_migrate_db()` runs at every startup and issues `ALTER TABLE ... ADD COLUMN` statements for columns added after the initial schema (`learning_goal TEXT`, `learning_goal_threshold INTEGER`). Each statement is wrapped in try/except so it is safely skipped if the column already exists. This means **no manual migration is needed on the Pi** for these columns — restarting the backend is sufficient.
 
@@ -188,7 +191,7 @@ Source: `frontend/src/App.jsx`. Router is `BrowserRouter`. All API calls go thro
 | `Students.jsx` | `/students` | List students grouped by class; inline add/edit form; bulk import (textarea, 1 name per line, with interactive name-disambiguation on conflict); per-class delete with time+keyword confirmation; links to class overview and student progress |
 | `TestList.jsx` | `/tests` | List tests with create-and-redirect form |
 | `TestEdit.jsx` | `/tests/:id/edit` | Add/edit/delete/reorder questions for a test; rename test via pencil; domain and pyramid level are fixed `<select>` dropdowns; optional "Leerdoel" text input (with datalist autocomplete from other goal names in the test) + "Drempel" number input; both must be set together or both left empty |
-| `SessionNew.jsx` | `/sessions/new` | Pick a test and class, then navigate to grading view |
+| `SessionNew.jsx` | `/sessions/new` | Shows in-progress sessions ("Lopende sessies") at the top with resume links; below that, the form to start a new session (pick test and class) |
 | `Grade.jsx` | `/sessions/:id/grade` | Main grading view (see Section 6 for flow details) |
 | `StudentProgress.jsx` | `/students/:id/progress` | Domain × pyramid heatmap + per-session score table for one student; "Rapport & Radar" button links to `/students/:id/report`; session rows are clickable and navigate to the session report with the student pre-selected (`?student=`) |
 | `ClassOverview.jsx` | `/classes/:class_name/overview` | Route-filtered class heatmap; route selector buttons at top; "Radardiagram" button links to `/classes/:class_name/radar` |
