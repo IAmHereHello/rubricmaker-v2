@@ -20,6 +20,11 @@ class StudentOut(StudentBase):
     id: int
     model_config = {"from_attributes": True}
 
+class StudentImport(BaseModel):
+    class_name: str
+    route: str
+    names: List[str]
+
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
 

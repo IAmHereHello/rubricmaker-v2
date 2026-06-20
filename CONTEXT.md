@@ -114,8 +114,12 @@ All routers are registered in `backend/main.py`. CORS is open (`allow_origins=["
 |---|---|---|
 | GET | `/students` | List all students, optional `?class_name=` filter, sorted by class then name |
 | POST | `/students` | Create a student |
+| POST | `/students/import` | Bulk import: body `{ class_name, route, names: [str] }`, returns `{ created: N }` |
+| DELETE | `/students/class/{class_name}` | Delete all students in a class (cascades to scores); returns `{ deleted: N }` |
 | PUT | `/students/{id}` | Update a student (full replace) |
 | DELETE | `/students/{id}` | Delete a student (cascades to scores) |
+
+**Router order matters:** `POST /students/import` and `DELETE /students/class/{class_name}` are registered before `DELETE /students/{id}` so the literal path segments are not captured as `{id}`. This is handled correctly in the current code.
 
 ### `/tests` — `backend/routers/tests.py`
 | Method | Path | Description |
@@ -181,7 +185,7 @@ Source: `frontend/src/App.jsx`. Router is `BrowserRouter`. All API calls go thro
 
 | React component | Route | Description |
 |---|---|---|
-| `Students.jsx` | `/students` | List students grouped by class; inline add/edit form; links to class overview and student progress |
+| `Students.jsx` | `/students` | List students grouped by class; inline add/edit form; bulk import (textarea, 1 name per line, with interactive name-disambiguation on conflict); per-class delete with time+keyword confirmation; links to class overview and student progress |
 | `TestList.jsx` | `/tests` | List tests with create-and-redirect form |
 | `TestEdit.jsx` | `/tests/:id/edit` | Add/edit/delete/reorder questions for a test; rename test via pencil; domain and pyramid level are fixed `<select>` dropdowns; optional "Leerdoel" text input (with datalist autocomplete from other goal names in the test) + "Drempel" number input; both must be set together or both left empty |
 | `SessionNew.jsx` | `/sessions/new` | Pick a test and class, then navigate to grading view |
@@ -293,6 +297,16 @@ A `Test` and its `Question`s are never modified during a session. Multiple sessi
 5. **"Vorige leerling" dead-click** (`Grade.jsx`): the Back button was disabled only when `sIdx === 0 && qIdx === 0`. At `sIdx === 0, qIdx > 0` it was enabled but `handlePrev` did nothing because it only calls `setSIdx` when `sIdx > 0`. Fixed by disabling the button whenever `sIdx === 0`.
 
 6. **Session report ghost students** (`backend/routers/reports.py`): `GET /reports/session/{id}` previously returned all students in `session.class_name`, including those the teacher skipped during Q1 ("Einde van de stapel"). Those students appeared in the class matrix as all-dash rows. Fixed by querying only students whose IDs are in `session.student_order`, preserving session order. Falls back to all class students (alphabetical) only when `student_order` is empty.
+
+7. **Student name uniqueness** (`Students.jsx`): student names must be globally unique (case-insensitive) across all classes, because names are used as display identifiers in session/report views. The DB `id` column is always the true unique key for internal references; the name-uniqueness constraint is enforced entirely in the frontend. When a duplicate is detected (on single-add save or on bulk import), a disambiguation flow prompts for one or more last-name initials, building a suffix appended as e.g. `"Jan B."`. The flow loops until the resolved name is unique against both the existing DB and the current import batch.
+
+### Duplicate-name disambiguation (Students.jsx)
+
+- `resolvedName(original, suffix)` — builds the display name: `"Jan B."` when suffix is `"B"`, `"Jan"` when suffix is empty.
+- `buildExistingNames(students, excludeId)` — returns a `Set` of lowercased names, excluding `excludeId` when editing an existing student.
+- `findConflicts(items, existingNames)` — checks each item's resolved name against the DB set and against other items in the same batch; returns indices of conflicting items.
+- **Single add**: `save()` detects a conflict and activates `singleDisambig` state `{ base, suffix, input }`. Each confirmation accumulates `suffix += input` and re-checks. "Terug" closes disambiguation and returns to the edit form.
+- **Bulk import**: `doImport()` runs `findConflicts` on all parsed names; if any conflict, sets `importDisambig` with `items` and `needsDisambig` flags. `confirmImportDisambig()` accumulates suffixes for all flagged items and re-runs `findConflicts`; repeats until clean, then calls `executeImport`.
 
 ### Sensitive areas that have been touched before
 

@@ -13,6 +13,11 @@ export const updateStudent = (id, data) => http.put(`/students/${id}`, data).the
 
 export const deleteStudent = (id) => http.delete(`/students/${id}`).then(r => r.data)
 
+export const importStudents = (data) => http.post('/students/import', data).then(r => r.data)
+
+export const deleteClass = (class_name) =>
+  http.delete(`/students/class/${encodeURIComponent(class_name)}`).then(r => r.data)
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 export const getTests = () => http.get('/tests').then(r => r.data)
