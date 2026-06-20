@@ -1,9 +1,11 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
 import * as api from '../api.js'
 import RouteBadge from '../components/RouteBadge.jsx'
 import { LEVEL_LABELS } from '../constants.js'
 import { exportPDF } from '../utils/exportPDF.js'
+import { exportRubricsPDF } from '../utils/exportRubric.js'
+import StudentRubric from '../components/StudentRubric.jsx'
 
 function ScoreCell({ sc, maxScore }) {
   if (!sc) return <span className="text-muted">—</span>
@@ -41,7 +43,7 @@ function computeGoals(questions, scores, studentId) {
   }
 }
 
-function StudentView({ data, selectedId, setSelectedId }) {
+function StudentView({ data, selectedId, setSelectedId, onExportRubric, isExportingRubric }) {
   const student = data.students.find(s => s.id === selectedId)
 
   let totalScored = 0, totalMax = 0
@@ -91,6 +93,16 @@ function StudentView({ data, selectedId, setSelectedId }) {
             </strong>{' '}
             behaald
           </div>
+        )}
+        {student && (
+          <button
+            className="btn btn-secondary"
+            style={{ alignSelf: 'flex-end' }}
+            onClick={() => onExportRubric([student.id])}
+            disabled={isExportingRubric}
+          >
+            {isExportingRubric ? 'Exporteren...' : 'Download rubric'}
+          </button>
         )}
       </div>
 
@@ -243,7 +255,11 @@ export default function SessionReport() {
   const [view, setView] = useState('student')
   const [selectedStudentId, setSelectedStudentId] = useState(null)
   const [exporting, setExporting] = useState(false)
+  const [grades, setGrades] = useState([])
+  const [exportTarget, setExportTarget] = useState(null)
+  const [isExportingRubric, setIsExportingRubric] = useState(false)
   const reportRef = useRef(null)
+  const rubricRefs = useRef({})
 
   useEffect(() => {
     api.getSessionReport(id)
@@ -258,6 +274,34 @@ export default function SessionReport() {
       .catch(() => setError('Fout bij laden van rapport.'))
   }, [id])
 
+  useEffect(() => {
+    api.getSessionGrades(id).then(setGrades).catch(() => {})
+  }, [id])
+
+  const gradeMap = useMemo(
+    () => Object.fromEntries(grades.map(g => [g.student_id, g])),
+    [grades]
+  )
+
+  useEffect(() => {
+    if (!exportTarget || !data) return
+    const timer = setTimeout(async () => {
+      setIsExportingRubric(true)
+      try {
+        const elements = exportTarget.studentIds.map(sid => rubricRefs.current[sid]).filter(Boolean)
+        const date = data.session.created_at.slice(0, 10)
+        const filename = exportTarget.studentIds.length === 1
+          ? `rubric-${data.students.find(s => s.id === exportTarget.studentIds[0])?.name ?? 'leerling'}-${date}.pdf`
+          : `rubrieken-${data.session.class_name}-${date}.pdf`
+        await exportRubricsPDF(elements, filename)
+      } finally {
+        setExportTarget(null)
+        setIsExportingRubric(false)
+      }
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [exportTarget])
+
   async function handleExport() {
     if (!reportRef.current || !data) return
     setExporting(true)
@@ -270,6 +314,11 @@ export default function SessionReport() {
     } finally {
       setExporting(false)
     }
+  }
+
+  function handleExportRubric(studentIds) {
+    rubricRefs.current = {}
+    setExportTarget({ studentIds })
   }
 
   if (!data) return <div className="page">{error || 'Laden...'}</div>
@@ -286,6 +335,13 @@ export default function SessionReport() {
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="btn btn-secondary" onClick={handleExport} disabled={exporting}>
             {exporting ? 'Exporteren...' : 'Exporteer PDF'}
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => handleExportRubric(data.students.map(s => s.id))}
+            disabled={isExportingRubric || !data?.students?.length}
+          >
+            {isExportingRubric ? 'Exporteren...' : 'Rubrieken exporteren'}
           </button>
           <Link to="/reports" className="btn btn-secondary">← Terug</Link>
         </div>
@@ -316,11 +372,36 @@ export default function SessionReport() {
             data={data}
             selectedId={selectedStudentId}
             setSelectedId={setSelectedStudentId}
+            onExportRubric={handleExportRubric}
+            isExportingRubric={isExportingRubric}
           />
         ) : (
           <ClassView data={data} />
         )}
       </div>
+
+      {/* Off-screen rubric renders used for PDF export */}
+      {exportTarget && (
+        <div style={{ position: 'fixed', left: '-9999px', top: 0, zIndex: -1 }}>
+          {exportTarget.studentIds.map(sid => {
+            const student = data.students.find(s => s.id === sid)
+            if (!student) return null
+            return (
+              <div key={sid} ref={el => { rubricRefs.current[sid] = el }}>
+                <StudentRubric
+                  student={student}
+                  test={data.test}
+                  session={data.session}
+                  questions={data.questions}
+                  scores={data.scores}
+                  classAverages={data.class_averages}
+                  grade={gradeMap[sid] ?? null}
+                />
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
