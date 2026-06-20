@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func
 from sqlalchemy.orm import Session as DBSession
 from typing import List
 
@@ -16,12 +15,11 @@ def list_sessions(db: DBSession = Depends(get_db)):
     result = []
     for s in sessions:
         test = db.query(TestModel).filter(TestModel.id == s.test_id).first()
-        total = db.query(func.count(Score.id)).filter(
-            Score.session_id == s.id, Score.excluded == False
-        ).scalar() or 0
-        graded = db.query(func.count(Score.id)).filter(
-            Score.session_id == s.id, Score.excluded == False, Score.points.isnot(None)
-        ).scalar() or 0
+        applicable = db.query(Score).filter(
+            Score.session_id == s.id, Score.excluded.is_(False)
+        ).all()
+        total = len(applicable)
+        graded = sum(1 for sc in applicable if sc.points is not None)
         result.append(SessionListOut(
             id=s.id,
             test_id=s.test_id,
