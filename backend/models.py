@@ -13,6 +13,7 @@ class Student(Base):
     route = Column(String, nullable=False)  # "oranje" | "geel" | "blauw"
 
     scores = relationship("Score", back_populates="student", cascade="all, delete-orphan")
+    grades = relationship("StudentGrade", back_populates="student", cascade="all, delete-orphan")
 
 
 class Test(Base):
@@ -21,6 +22,8 @@ class Test(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     created_at = Column(DateTime, server_default=func.now())
+    grading_method = Column(String, nullable=True)   # "points" | "goals" | null
+    grade_config = Column(JSON, nullable=True)        # {oranje:{beheerst:N,expert:N}, geel:{...}, blauw:{...}}
 
     questions = relationship(
         "Question", back_populates="test", cascade="all, delete-orphan",
@@ -59,6 +62,7 @@ class Session(Base):
 
     test = relationship("Test", back_populates="sessions")
     scores = relationship("Score", back_populates="session", cascade="all, delete-orphan")
+    grades = relationship("StudentGrade", back_populates="session", cascade="all, delete-orphan")
 
 
 class Score(Base):
@@ -74,3 +78,17 @@ class Score(Base):
     session = relationship("Session", back_populates="scores")
     student = relationship("Student", back_populates="scores")
     question = relationship("Question", back_populates="scores")
+
+
+class StudentGrade(Base):
+    __tablename__ = "student_grades"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("sessions.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+    grade = Column(String, nullable=False)   # "beheerst" | "expert" | "in_ontwikkeling"
+    is_manual = Column(Boolean, default=False)
+    review_done = Column(Boolean, default=False)
+
+    session = relationship("Session", back_populates="grades")
+    student = relationship("Student", back_populates="grades")

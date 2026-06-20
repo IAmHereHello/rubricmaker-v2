@@ -14,6 +14,8 @@ def _serialize_test(t: Test) -> dict:
         "id": t.id,
         "name": t.name,
         "created_at": t.created_at,
+        "grading_method": t.grading_method,
+        "grade_config": t.grade_config,
         "questions": sorted(
             [
                 {
@@ -26,6 +28,8 @@ def _serialize_test(t: Test) -> dict:
                     "routes": q.routes or [],
                     "domain": q.domain or "",
                     "pyramid_level": q.pyramid_level,
+                    "learning_goal": q.learning_goal,
+                    "learning_goal_threshold": q.learning_goal_threshold,
                 }
                 for q in t.questions
             ],
@@ -66,7 +70,13 @@ def update_test(id: int, test: TestUpdate, db: Session = Depends(get_db)):
     obj = db.query(Test).filter(Test.id == id).first()
     if not obj:
         raise HTTPException(404, "Toets niet gevonden")
-    obj.name = test.name
+    fields = test.model_fields_set
+    if "name" in fields and test.name is not None:
+        obj.name = test.name
+    if "grading_method" in fields:
+        obj.grading_method = test.grading_method
+    if "grade_config" in fields:
+        obj.grade_config = test.grade_config
     db.commit()
     db.refresh(obj)
     return obj

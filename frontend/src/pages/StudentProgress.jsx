@@ -6,6 +6,21 @@ import { PYRAMID_LEVELS, pyramidLabel } from '../constants.js'
 
 const LEVELS = PYRAMID_LEVELS.map(l => l.value)
 
+const GRADE_LABELS = { expert: 'Expert', beheerst: 'Beheerst', in_ontwikkeling: 'In Ontwikkeling' }
+const GRADE_COLORS = { expert: '#2e7d32', beheerst: '#1a6ecc', in_ontwikkeling: '#c07000' }
+const GRADE_BG    = { expert: '#e8f5e9', beheerst: '#e8f0fc', in_ontwikkeling: '#fff3e0' }
+
+function GradeBadge({ grade }) {
+  return (
+    <span style={{
+      display: 'inline-block', fontSize: 12, fontWeight: 600, borderRadius: 4,
+      padding: '2px 8px', color: GRADE_COLORS[grade], background: GRADE_BG[grade],
+    }}>
+      {GRADE_LABELS[grade] || grade}
+    </span>
+  )
+}
+
 function pctColor(pct) {
   if (pct === null || pct === undefined) return 'cell-empty'
   if (pct >= 75) return 'cell-green'
@@ -102,6 +117,7 @@ export default function StudentProgress() {
                 <th>Datum</th>
                 <th>Klas</th>
                 <th>Totaal</th>
+                <th>Beoordeling</th>
                 <th>Per domein</th>
               </tr>
             </thead>
@@ -123,6 +139,9 @@ export default function StudentProgress() {
                         ({Math.round(sess.total_scored / sess.total_max * 100)}%)
                       </span>
                     )}
+                  </td>
+                  <td>
+                    {sess.grade ? <GradeBadge grade={sess.grade} /> : <span className="text-muted">—</span>}
                   </td>
                   <td>
                     {Object.entries(sess.domains).map(([dom, v]) => (

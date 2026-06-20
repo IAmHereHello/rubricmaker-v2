@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session as DBSession
 from typing import List
 
 from ..database import get_db
-from ..models import Session as SessionModel, Score, Test as TestModel, Student as StudentModel
+from ..models import Session as SessionModel, Score, Test as TestModel, Student as StudentModel, StudentGrade
 from ..schemas import SessionCreate, SessionOut, SessionListOut, SessionOrderUpdate
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -37,6 +37,14 @@ def list_sessions(db: DBSession = Depends(get_db)):
                 Score.points.isnot(None),
             ).count()
 
+        has_grading = bool(test and test.grading_method)
+        review_count = 0
+        if has_grading and order:
+            review_count = db.query(StudentGrade).filter(
+                StudentGrade.session_id == s.id,
+                StudentGrade.review_done.is_(True),
+            ).count()
+
         result.append(SessionListOut(
             id=s.id,
             test_id=s.test_id,
@@ -46,6 +54,9 @@ def list_sessions(db: DBSession = Depends(get_db)):
             student_order=order,
             graded_count=graded,
             total_count=total,
+            review_count=review_count,
+            student_count=len(order),
+            has_grading=has_grading,
         ))
     return result
 

@@ -53,9 +53,13 @@ Relationships: has many `Score` (cascade delete).
 
 ### Test
 ```
-id          Integer   PK
-name        String    not null
-created_at  DateTime  server default now()
+id              Integer   PK
+name            String    not null
+created_at      DateTime  server default now()
+grading_method  String    nullable  — "points" | "goals" | null (no grading configured)
+grade_config    JSON      nullable  — per-route thresholds: {oranje:{beheerst:N,expert:N}, geel:{...}, blauw:{...}}
+                                      For "points": N is a percentage (0–100).
+                                      For "goals": N is an absolute count of learning goals.
 ```
 Relationships: has many `Question` (ordered by `Question.order`, cascade delete), has many `Session` (cascade delete).
 
@@ -100,6 +104,18 @@ points       Integer  nullable  — null means "not yet graded", NOT zero
 excluded     Boolean  default False  — true if question does not apply to student's route
 ```
 Relationships: belongs to `Session`, `Student`, and `Question`.
+
+### StudentGrade
+```
+id           Integer  PK
+session_id   Integer  FK → sessions.id  (cascade delete)
+student_id   Integer  FK → students.id  (cascade delete)
+grade        String   not null  — "beheerst" | "expert" | "in_ontwikkeling"
+is_manual    Boolean  default False  — True when teacher overrode the computed grade
+review_done  Boolean  default False  — True when teacher confirmed this student in the review round
+```
+Only created when a test has `grading_method` set. One record per (session, student).
+A grade is only shown on the student progress page once `review_done = True`.
 
 **Constraint:** there is no unique index on `(session_id, student_id, question_id)` in the model, but the `PUT /scores` endpoint implements upsert logic manually (query first, update if found, insert otherwise).
 
@@ -148,6 +164,12 @@ All routers are registered in `backend/main.py`. CORS is open (`allow_origins=["
 | GET | `/sessions/{id}` | Get session + all its scores in one response |
 | PUT | `/sessions/{id}/order` | Set or replace the session's `student_order` |
 
+### `/grades` — `backend/routers/grades.py`
+| Method | Path | Description |
+|---|---|---|
+| GET | `/grades/session/{session_id}` | List all StudentGrade records for a session |
+| PUT | `/grades/session/{session_id}/student/{student_id}` | Upsert a StudentGrade (grade + is_manual + review_done) |
+
 ### `/scores` — `backend/routers/scores.py`
 | Method | Path | Description |
 |---|---|---|
@@ -172,14 +194,24 @@ Both progress endpoints filter out excluded scores and scores where `points IS N
 
 All report endpoints apply the same route-exclusion logic as the rest of the app: excluded and ungraded scores are ignored; axes with zero applicable questions yield `pct: null`, not `pct: 0`.
 
-### In-progress session detection
-`GET /sessions` returns `graded_count` and `total_count` per session (via `SessionListOut` in `schemas.py`; individual-session endpoints still use `SessionOut`).
+### Session list (`GET /sessions`) — in-progress and review detection
+Returns `graded_count`, `total_count`, `review_count`, `student_count`, and `has_grading` per session (via `SessionListOut` in `schemas.py`).
 
 **`total_count`** is computed from the expected number of non-excluded scores: for each question in the test, count how many students in `session.student_order` have a route included in `question.routes`. This gives the true denominator even for questions not yet reached (which have no Score rows at all). When `student_order` is empty (Q1 not yet started), `total_count` is 0.
 
 **`graded_count`** is the count of non-excluded Score rows with `points IS NOT NULL`.
 
-**In-progress rule (frontend):** a session appears in "Lopende sessies" when `total_count === 0` (Q1 not started) or `graded_count < total_count`. A session where `graded_count === total_count > 0` is considered complete and hidden.
+**`review_count`** is the count of StudentGrade rows with `review_done = True` for the session. Only queried when `has_grading = True`.
+
+**`student_count`** is `len(session.student_order)`.
+
+**`has_grading`** is True when `test.grading_method` is not null.
+
+**In-progress rule (frontend):**
+- `total_count === 0` → "Nog niet gestart" (Q1 not started)
+- `graded_count < total_count` → "X/Y beoordeeld" (grading in progress)
+- `graded_count === total_count > 0 && has_grading && review_count < student_count` → "Beoordelingsronde" (needs review round)
+- `graded_count === total_count > 0 && (!has_grading || review_count === student_count)` → complete (hidden)
 
 ### Schema migrations (`backend/main.py`)
 `_migrate_db()` runs at every startup and issues `ALTER TABLE ... ADD COLUMN` statements for columns added after the initial schema (`learning_goal TEXT`, `learning_goal_threshold INTEGER`). Each statement is wrapped in try/except so it is safely skipped if the column already exists. This means **no manual migration is needed on the Pi** for these columns — restarting the backend is sufficient.
@@ -201,6 +233,7 @@ Source: `frontend/src/App.jsx`. Router is `BrowserRouter`. All API calls go thro
 | `Grade.jsx` | `/sessions/:id/grade` | Main grading view (see Section 6 for flow details) |
 | `StudentProgress.jsx` | `/students/:id/progress` | Domain × pyramid heatmap + per-session score table for one student; "Rapport & Radar" button links to `/students/:id/report`; session rows are clickable and navigate to the session report with the student pre-selected (`?student=`) |
 | `ClassOverview.jsx` | `/classes/:class_name/overview` | Route-filtered class heatmap; route selector buttons at top; "Radardiagram" button links to `/classes/:class_name/radar` |
+| `Review.jsx` | `/sessions/:id/review` | Post-grading review round: for each student (in `student_order` order), shows score table with inline-editable scores, auto-computed grade (or manual override), and confirmation step. Advances to next student on "Bevestigen →". When all done, shows summary. |
 | `ReportHome.jsx` | `/reports` | Lists all sessions (newest first) with test name, class, date, and link to each session report |
 | `SessionReport.jsx` | `/reports/session/:id` | Per-session report with "Per leerling" tab (student dropdown + per-question score table) and "Klassenoverzicht" tab (question × student matrix); excluded questions shown as "n.v.t."; PDF export; pre-selects a student from `?student=` query param; shows learning goal achievement (see Section 6) |
 | `StudentReport.jsx` | `/students/:id/report` | Two tabs: "Voortgang over tijd" (line charts per domain / per pyramid level across sessions) and "Radardiagram" (domain radar + level radar with multi-student overlay selector); PDF export; session rows in the timeline table are clickable and navigate to the session report with the student pre-selected |
@@ -280,6 +313,35 @@ A question becomes a **learning goal question** when both `learning_goal` (a fre
 - `SessionReport.jsx` class view: per-student goal counts (`X/Y LG`) in column headers; class average above the table; ✓/✗ per student per goal question.
 - `TestEdit.jsx` question list: a blue badge shows `{name} ≥{threshold}` when a goal is configured.
 
+### Grades (Beheerst / Expert / In Ontwikkeling)
+
+Configured per test in `TestEdit.jsx` (new "Beoordeling" section at the bottom). Settings are stored on the `Test` model (`grading_method`, `grade_config`).
+
+**Methods:**
+- `"points"` — grade based on percentage of total applicable points scored.
+- `"goals"` — grade based on the count of named learning goals achieved.
+
+**Per-route thresholds:** `grade_config[route].beheerst` and `grade_config[route].expert`. For "points", values are percentages; for "goals", values are absolute counts. The `beheerst` threshold must be lower than `expert`.
+
+**Grade computation (frontend, `computeGrade()` in `Review.jsx`):**
+- Points: `pct = scored / max * 100`. If `pct >= expert` → "expert"; if `pct >= beheerst` → "beheerst"; else → "in_ontwikkeling".
+- Goals: count achieved learning goal groups (same logic as learning goal achievement in `SessionReport.jsx`). Compare count to per-route thresholds.
+- Excluded questions and ungraded scores are ignored.
+
+**Review round:**
+When all questions are graded AND `test.grading_method` is set, `Grade.jsx` redirects to `/sessions/:id/review` instead of showing the done card. The review round lets the teacher confirm (or override) the computed grade per student. Once all students have `review_done = True`, the session is fully complete.
+
+**Grade display:**
+- `StudentProgress.jsx` session table: shows a coloured badge (Expert = green, Beheerst = blue, In Ontwikkeling = orange) once `review_done = True`.
+- `GET /progress/student/{id}` includes `grade` per session (null if not yet reviewed).
+
+### Schema migrations (`backend/main.py`)
+`_migrate_db()` runs at every startup. In addition to the `learning_goal` columns, it now also adds:
+- `ALTER TABLE tests ADD COLUMN grading_method TEXT`
+- `ALTER TABLE tests ADD COLUMN grade_config TEXT`
+
+The `student_grades` table is created by `models.Base.metadata.create_all()` (SQLAlchemy creates it if it doesn't exist, safe for existing databases).
+
 ### Previous scores panel is collapsed by default
 `showPrev` initialises to `false` in `Grade.jsx`. This is intentional: the teacher should not see a student's previous question scores while grading the current question, to avoid anchoring bias. Do not initialise it to `true`.
 
@@ -307,7 +369,9 @@ A `Test` and its `Question`s are never modified during a session. Multiple sessi
 
 6. **Session report ghost students** (`backend/routers/reports.py`): `GET /reports/session/{id}` previously returned all students in `session.class_name`, including those the teacher skipped during Q1 ("Einde van de stapel"). Those students appeared in the class matrix as all-dash rows. Fixed by querying only students whose IDs are in `session.student_order`, preserving session order. Falls back to all class students (alphabetical) only when `student_order` is empty.
 
-7. **Student name uniqueness** (`Students.jsx`): student names must be globally unique (case-insensitive) across all classes, because names are used as display identifiers in session/report views. The DB `id` column is always the true unique key for internal references; the name-uniqueness constraint is enforced entirely in the frontend. When a duplicate is detected (on single-add save or on bulk import), a disambiguation flow prompts for one or more last-name initials, building a suffix appended as e.g. `"Jan B."`. The flow loops until the resolved name is unique against both the existing DB and the current import batch.
+8. **`_serialize_test` was missing `learning_goal` / `learning_goal_threshold`** (`backend/routers/tests.py`): the `GET /tests/{id}` endpoint now includes these fields in each question dict, so `TestEdit.jsx` correctly shows and pre-fills them when editing a question.
+
+9. **Student name uniqueness** (`Students.jsx`): student names must be globally unique (case-insensitive) across all classes, because names are used as display identifiers in session/report views. The DB `id` column is always the true unique key for internal references; the name-uniqueness constraint is enforced entirely in the frontend. When a duplicate is detected (on single-add save or on bulk import), a disambiguation flow prompts for one or more last-name initials, building a suffix appended as e.g. `"Jan B."`. The flow loops until the resolved name is unique against both the existing DB and the current import batch.
 
 ### Duplicate-name disambiguation (Students.jsx)
 

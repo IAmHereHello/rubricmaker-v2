@@ -5,6 +5,7 @@ import { PYRAMID_LEVELS, pyramidLabel, DOMAINS } from '../constants.js'
 
 const ROUTES_ALL = ['oranje', 'geel', 'blauw']
 const EMPTY_Q = { description: '', answer: '', max_score: 1, routes: ['oranje', 'geel', 'blauw'], domain: DOMAINS[0], pyramid_level: PYRAMID_LEVELS[0].value, learning_goal: '', learning_goal_threshold: '' }
+const EMPTY_CONFIG = { oranje: { beheerst: '', expert: '' }, geel: { beheerst: '', expert: '' }, blauw: { beheerst: '', expert: '' } }
 
 export default function TestEdit() {
   const { id } = useParams()
@@ -15,9 +16,28 @@ export default function TestEdit() {
   const [testName, setTestName] = useState('')
   const [error, setError] = useState('')
 
+  // Grading config state
+  const [gradingMethod, setGradingMethod] = useState(null)   // null | 'points' | 'goals'
+  const [gradeConfig, setGradeConfig] = useState(EMPTY_CONFIG)
+  const [gradingError, setGradingError] = useState('')
+  const [gradingSaved, setGradingSaved] = useState(false)
+
   useEffect(() => {
     api.getTest(id)
-      .then(t => { setTest(t); setTestName(t.name) })
+      .then(t => {
+        setTest(t)
+        setTestName(t.name)
+        if (t.grading_method) {
+          setGradingMethod(t.grading_method)
+          if (t.grade_config) {
+            setGradeConfig({
+              oranje: { beheerst: t.grade_config.oranje?.beheerst ?? '', expert: t.grade_config.oranje?.expert ?? '' },
+              geel:   { beheerst: t.grade_config.geel?.beheerst   ?? '', expert: t.grade_config.geel?.expert   ?? '' },
+              blauw:  { beheerst: t.grade_config.blauw?.beheerst  ?? '', expert: t.grade_config.blauw?.expert  ?? '' },
+            })
+          }
+        }
+      })
       .catch(() => setError('Fout bij laden van toets.'))
   }, [id])
 
@@ -96,6 +116,42 @@ export default function TestEdit() {
       await api.deleteQuestion(qid)
       setTest(await api.getTest(id))
     } catch { setError('Verwijderen mislukt.') }
+  }
+
+  async function saveGrading() {
+    setGradingError('')
+    if (gradingMethod) {
+      for (const route of ROUTES_ALL) {
+        const b = parseInt(gradeConfig[route].beheerst)
+        const e = parseInt(gradeConfig[route].expert)
+        if (isNaN(b) || isNaN(e)) { setGradingError('Vul alle drempelwaarden in.'); return }
+        if (b >= e) { setGradingError(`Beheerst-drempel moet lager zijn dan Expert-drempel (${route}).`); return }
+        if (gradingMethod === 'points' && (b < 0 || b > 100 || e < 0 || e > 100)) {
+          setGradingError('Percentages moeten tussen 0 en 100 liggen.'); return
+        }
+        if (gradingMethod === 'goals' && (b < 1 || e < 1)) {
+          setGradingError('Aantal leerdoelen moet minimaal 1 zijn.'); return
+        }
+      }
+    }
+
+    const payload = gradingMethod
+      ? {
+          grading_method: gradingMethod,
+          grade_config: {
+            oranje: { beheerst: parseInt(gradeConfig.oranje.beheerst), expert: parseInt(gradeConfig.oranje.expert) },
+            geel:   { beheerst: parseInt(gradeConfig.geel.beheerst),   expert: parseInt(gradeConfig.geel.expert) },
+            blauw:  { beheerst: parseInt(gradeConfig.blauw.beheerst),  expert: parseInt(gradeConfig.blauw.expert) },
+          },
+        }
+      : { grading_method: null, grade_config: null }
+
+    try {
+      const updated = await api.updateTest(id, payload)
+      setTest(t => ({ ...t, grading_method: updated.grading_method, grade_config: updated.grade_config }))
+      setGradingSaved(true)
+      setTimeout(() => setGradingSaved(false), 2000)
+    } catch { setGradingError('Opslaan mislukt.') }
   }
 
   async function moveQ(idx, dir) {
@@ -295,6 +351,80 @@ export default function TestEdit() {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Grading configuration */}
+      <div className="card">
+        <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16, color: '#1e3a5f' }}>Beoordeling</h2>
+
+        <div className="field" style={{ marginBottom: 16 }}>
+          <label style={{ fontWeight: 600 }}>Beoordelingsmethode</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
+            {[
+              { value: null, label: 'Geen beoordeling' },
+              { value: 'points', label: 'Op basis van punten (%)' },
+              { value: 'goals', label: 'Op basis van leerdoelen (aantal behaald)' },
+            ].map(opt => (
+              <label key={String(opt.value)} style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 400, cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  name="grading_method"
+                  checked={gradingMethod === opt.value}
+                  onChange={() => { setGradingMethod(opt.value); setGradingError('') }}
+                />
+                {opt.label}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {gradingMethod && (
+          <div style={{ marginBottom: 16 }}>
+            <table style={{ borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', padding: '4px 12px 4px 0', color: '#555' }}>Route</th>
+                  <th style={{ padding: '4px 12px', color: '#555' }}>
+                    Beheerst {gradingMethod === 'points' ? '(% ≥)' : '(doelen ≥)'}
+                  </th>
+                  <th style={{ padding: '4px 12px', color: '#555' }}>
+                    Expert {gradingMethod === 'points' ? '(% ≥)' : '(doelen ≥)'}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {ROUTES_ALL.map(route => (
+                  <tr key={route}>
+                    <td style={{ padding: '6px 12px 6px 0' }}>
+                      <span className={`badge badge-${route}`}>{route}</span>
+                    </td>
+                    <td style={{ padding: '6px 12px' }}>
+                      <input
+                        type="number" min={0} max={gradingMethod === 'points' ? 100 : undefined}
+                        value={gradeConfig[route].beheerst}
+                        onChange={e => setGradeConfig(c => ({ ...c, [route]: { ...c[route], beheerst: e.target.value } }))}
+                        style={{ width: 72 }}
+                      />
+                    </td>
+                    <td style={{ padding: '6px 12px' }}>
+                      <input
+                        type="number" min={0} max={gradingMethod === 'points' ? 100 : undefined}
+                        value={gradeConfig[route].expert}
+                        onChange={e => setGradeConfig(c => ({ ...c, [route]: { ...c[route], expert: e.target.value } }))}
+                        style={{ width: 72 }}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {gradingError && <div className="alert alert-error" style={{ marginBottom: 12 }}>{gradingError}</div>}
+        {gradingSaved && <div className="alert" style={{ background: '#e8f5e9', border: '1px solid #81c784', borderRadius: 6, padding: '8px 12px', marginBottom: 12, color: '#2e7d32' }}>Beoordelingsinstelling opgeslagen.</div>}
+
+        <button className="btn btn-primary btn-sm" onClick={saveGrading}>Opslaan</button>
       </div>
     </div>
   )
