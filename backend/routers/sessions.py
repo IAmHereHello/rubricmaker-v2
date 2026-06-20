@@ -1,17 +1,38 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session as DBSession
 from typing import List
 
 from ..database import get_db
-from ..models import Session as SessionModel, Score
-from ..schemas import SessionCreate, SessionOut, SessionOrderUpdate
+from ..models import Session as SessionModel, Score, Test as TestModel
+from ..schemas import SessionCreate, SessionOut, SessionListOut, SessionOrderUpdate
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 
-@router.get("", response_model=List[SessionOut])
+@router.get("", response_model=List[SessionListOut])
 def list_sessions(db: DBSession = Depends(get_db)):
-    return db.query(SessionModel).order_by(SessionModel.created_at.desc()).all()
+    sessions = db.query(SessionModel).order_by(SessionModel.created_at.desc()).all()
+    result = []
+    for s in sessions:
+        test = db.query(TestModel).filter(TestModel.id == s.test_id).first()
+        total = db.query(func.count(Score.id)).filter(
+            Score.session_id == s.id, Score.excluded == False
+        ).scalar() or 0
+        graded = db.query(func.count(Score.id)).filter(
+            Score.session_id == s.id, Score.excluded == False, Score.points.isnot(None)
+        ).scalar() or 0
+        result.append(SessionListOut(
+            id=s.id,
+            test_id=s.test_id,
+            test_name=test.name if test else "Onbekende toets",
+            class_name=s.class_name,
+            created_at=s.created_at,
+            student_order=s.student_order or [],
+            graded_count=graded,
+            total_count=total,
+        ))
+    return result
 
 
 @router.post("", response_model=SessionOut)
