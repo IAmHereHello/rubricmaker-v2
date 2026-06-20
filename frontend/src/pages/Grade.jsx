@@ -3,6 +3,12 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
 import RouteBadge from '../components/RouteBadge.jsx'
 import { pyramidLabel } from '../constants.js'
+import {
+  isApplicableForQuestion,
+  getOrderedStudents,
+  shouldEnterQ1Mode,
+  findResumePosition,
+} from '../utils/gradingLogic.js'
 
 export default function Grade() {
   const { id } = useParams()
@@ -29,6 +35,7 @@ export default function Grade() {
   const [q1Saving, setQ1Saving] = useState(false)
   const q1NameRef = useRef(null)
   const q1ScoreRef = useRef(null)
+  const q1AddRef = useRef(null)
   const prevQ1SelectedId = useRef(null)
 
   // ── Initial load ────────────────────────────────────────────────────────────
@@ -70,37 +77,7 @@ export default function Grade() {
     load()
   }, [id])
 
-  // ── Q1 mode detection ────────────────────────────────────────────────────────
-  // Returns true when we still need to collect the student stack for Q1.
-  function shouldEnterQ1Mode(sess, t, scoreMap) {
-    if (!t?.questions.length) return false
-    const order = sess.student_order || []
-    // Never started Q1 yet
-    if (order.length === 0) return true
-    // If any question beyond Q1 has a score, Q1 collection is finished
-    if (t.questions.length > 1) {
-      const hasPostQ1Scores = t.questions
-        .slice(1)
-        .some(q => Object.keys(scoreMap).some(k => k.startsWith(`${q.id}-`)))
-      return !hasPostQ1Scores
-    }
-    // Single-question test: Q1 mode is done once all ordered students have a score
-    const q1 = t.questions[0]
-    const allScored = order.every(sid => {
-      const sc = scoreMap[`${q1.id}-${sid}`]
-      return sc && (sc.points !== null || sc.excluded)
-    })
-    return !allScored
-  }
-
   // ── Derived state (regular mode) ─────────────────────────────────────────────
-  function getOrderedStudents(sess, studs) {
-    if (sess?.student_order?.length) {
-      return sess.student_order.map(sid => studs.find(s => s.id === sid)).filter(Boolean)
-    }
-    return [...studs].sort((a, b) => a.name.localeCompare(b.name, 'nl'))
-  }
-
   const orderedStudents = useMemo(
     () => getOrderedStudents(session, students),
     [session?.student_order, students]
@@ -144,7 +121,7 @@ export default function Grade() {
       .map(sid => {
         const stud = students.find(s => s.id === sid)
         const sc = scores[scoreKey(q1.id, sid)]
-        return stud ? { id: sid, name: stud.name, points: sc?.points } : null
+        return stud ? { id: sid, name: stud.name, points: sc?.points ?? null, excluded: sc?.excluded ?? false } : null
       })
       .filter(Boolean)
   }, [q1Mode, session?.student_order, students, scores, test])
@@ -174,30 +151,22 @@ export default function Grade() {
     if (q1Mode) q1NameRef.current?.focus()
   }, [q1Mode])
 
-  // Auto-focus score input when a valid student is selected in Q1 mode
+  // Auto-focus the relevant input when a valid student is selected in Q1 mode
   useEffect(() => {
     const newId = q1SelectedStudent?.id ?? null
     if (newId !== null && newId !== prevQ1SelectedId.current) {
-      q1ScoreRef.current?.focus()
-      q1ScoreRef.current?.select()
+      const applicable = (test?.questions[0]?.routes || []).includes(q1SelectedStudent?.route)
+      if (applicable) {
+        q1ScoreRef.current?.focus()
+        q1ScoreRef.current?.select()
+      } else {
+        q1AddRef.current?.focus()
+      }
     }
     prevQ1SelectedId.current = newId
   }, [q1SelectedStudent?.id])
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
-  function findResumePosition(t, ordered, scoreMap) {
-    for (let qi = 0; qi < t.questions.length; qi++) {
-      const q = t.questions[qi]
-      const applicable = ordered.filter(s => (q.routes || []).includes(s.route))
-      for (let si = 0; si < applicable.length; si++) {
-        const key = scoreKey(q.id, applicable[si].id)
-        const sc = scoreMap[key]
-        if (!sc || (sc.points === null && !sc.excluded)) return [qi, si]
-      }
-    }
-    return [t.questions.length, 0]
-  }
-
   async function persistScore() {
     if (!currentQuestion || !currentStudent || inputVal === '') return
     const points = parseInt(inputVal, 10)
@@ -219,7 +188,7 @@ export default function Grade() {
   }
 
   async function createExcludedScores(question, allStudents) {
-    const excluded = allStudents.filter(s => !(question.routes || []).includes(s.route))
+    const excluded = allStudents.filter(s => !isApplicableForQuestion(s, question))
     for (const s of excluded) {
       const key = scoreKey(question.id, s.id)
       if (!scores[key]) {
@@ -267,10 +236,42 @@ export default function Grade() {
     }
   }
 
+  async function handleQ1AddToStack() {
+    if (!q1SelectedStudent || !test?.questions[0]) return
+
+    setQ1Saving(true)
+
+    const saved = await api.upsertScore({
+      session_id: parseInt(id),
+      student_id: q1SelectedStudent.id,
+      question_id: test.questions[0].id,
+      points: null,
+      excluded: true,
+    })
+    setScores(prev => ({ ...prev, [scoreKey(test.questions[0].id, q1SelectedStudent.id)]: saved }))
+
+    const newOrder = [...(session.student_order || []), q1SelectedStudent.id]
+    const updated = await api.setSessionOrder(id, { student_order: newOrder })
+    setSession(updated)
+
+    setQ1Saving(false)
+    setQ1Name('')
+    setQ1ScoreVal('')
+
+    if (newOrder.length >= students.length) {
+      await finishQ1(newOrder)
+    } else {
+      q1NameRef.current?.focus()
+    }
+  }
+
   async function finishQ1(newStudentOrder) {
     const ordered = newStudentOrder
       .map(sid => students.find(s => s.id === sid))
       .filter(Boolean)
+
+    // Ensure excluded Q1 scores exist for any non-applicable students in the stack
+    await createExcludedScores(test.questions[0], ordered)
 
     setQ1Mode(false)
 
@@ -284,7 +285,7 @@ export default function Grade() {
 
     while (startQIdx < test.questions.length) {
       const q = test.questions[startQIdx]
-      const applicable = ordered.filter(s => (q.routes || []).includes(s.route))
+      const applicable = ordered.filter(s => isApplicableForQuestion(s, q))
       if (applicable.length > 0) break
       skippedIndices.push(startQIdx)
       await createExcludedScores(q, ordered)
@@ -339,7 +340,7 @@ export default function Grade() {
     // students on regular questions) and collect their indices for the notice.
     while (nextQIdx < test.questions.length) {
       const q = test.questions[nextQIdx]
-      const applicable = orderedStudents.filter(s => (q.routes || []).includes(s.route))
+      const applicable = orderedStudents.filter(s => isApplicableForQuestion(s, q))
       if (applicable.length > 0) break
       skippedIndices.push(nextQIdx)
       await createExcludedScores(q, orderedStudents)
@@ -415,6 +416,7 @@ export default function Grade() {
     const q1 = test.questions[0]
     const enteredCount = session?.student_order?.length || 0
     const totalCount = students.length
+    const q1IsApplicable = !q1SelectedStudent || isApplicableForQuestion(q1SelectedStudent, q1)
 
     return (
       <div className="page" style={{ maxWidth: 1040, marginLeft: 'auto', marginRight: 'auto' }}>
@@ -461,6 +463,7 @@ export default function Grade() {
                 onChange={e => setQ1Name(e.target.value)}
                 onKeyDown={e => {
                   if (e.key === 'Escape') { setQ1Name(''); setQ1ScoreVal('') }
+                  if (e.key === 'Enter' && q1SelectedStudent && !q1IsApplicable) handleQ1AddToStack()
                 }}
                 placeholder="Begin met typen om een leerling te zoeken…"
                 style={{ width: '100%', fontSize: 15, padding: '9px 12px' }}
@@ -479,24 +482,40 @@ export default function Grade() {
                     {q1SelectedStudent.name}
                   </span>
                   <RouteBadge route={q1SelectedStudent.route} />
-                  <input
-                    ref={q1ScoreRef}
-                    type="number"
-                    className="grade-score-input"
-                    min={0}
-                    max={q1.max_score}
-                    value={q1ScoreVal}
-                    onChange={e => setQ1ScoreVal(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') handleQ1Submit() }}
-                  />
-                  <span className="grade-score-max">/ {q1.max_score}</span>
-                  <button
-                    className="btn btn-primary"
-                    onClick={handleQ1Submit}
-                    disabled={q1Saving || q1ScoreVal === ''}
-                  >
-                    {q1Saving ? 'Opslaan…' : 'Opslaan →'}
-                  </button>
+                  {q1IsApplicable ? (
+                    <>
+                      <input
+                        ref={q1ScoreRef}
+                        type="number"
+                        className="grade-score-input"
+                        min={0}
+                        max={q1.max_score}
+                        value={q1ScoreVal}
+                        onChange={e => setQ1ScoreVal(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleQ1Submit() }}
+                      />
+                      <span className="grade-score-max">/ {q1.max_score}</span>
+                      <button
+                        className="btn btn-primary"
+                        onClick={handleQ1Submit}
+                        disabled={q1Saving || q1ScoreVal === ''}
+                      >
+                        {q1Saving ? 'Opslaan…' : 'Opslaan →'}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ color: '#888', fontStyle: 'italic', fontSize: 14 }}>n.v.t.</span>
+                      <button
+                        ref={q1AddRef}
+                        className="btn btn-primary"
+                        onClick={handleQ1AddToStack}
+                        disabled={q1Saving}
+                      >
+                        {q1Saving ? 'Toevoegen…' : 'Toevoegen →'}
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -514,7 +533,9 @@ export default function Grade() {
                       padding: '4px 10px', background: '#f0f3f8', borderRadius: 6, fontSize: 13,
                     }}>
                       <span>{item.name}</span>
-                      <span style={{ fontWeight: 700, color: '#1e3a5f' }}>{item.points}</span>
+                      <span style={{ fontWeight: 700, color: item.excluded ? '#888' : '#1e3a5f' }}>
+                        {item.excluded ? 'n.v.t.' : (item.points !== null ? item.points : '—')}
+                      </span>
                     </div>
                   ))}
                 </div>
