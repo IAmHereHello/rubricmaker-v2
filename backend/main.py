@@ -4,7 +4,7 @@ from sqlalchemy import text
 
 from .database import engine
 from . import models
-from .routers import students, tests, questions, sessions, scores, progress, reports
+from .routers import students, tests, questions, sessions, scores, progress, reports, grades
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -14,6 +14,8 @@ def _migrate_db():
         for stmt in [
             "ALTER TABLE questions ADD COLUMN learning_goal TEXT",
             "ALTER TABLE questions ADD COLUMN learning_goal_threshold INTEGER",
+            "ALTER TABLE tests ADD COLUMN grading_method TEXT",
+            "ALTER TABLE tests ADD COLUMN grade_config TEXT",
         ]:
             try:
                 conn.execute(text(stmt))
@@ -40,6 +42,7 @@ app.include_router(sessions.router)
 app.include_router(scores.router)
 app.include_router(progress.router)
 app.include_router(reports.router)
+app.include_router(grades.router)
 
 
 @app.get("/")

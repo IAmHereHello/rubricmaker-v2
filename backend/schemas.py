@@ -32,12 +32,16 @@ class TestCreate(BaseModel):
     name: str
 
 class TestUpdate(BaseModel):
-    name: str
+    name: Optional[str] = None
+    grading_method: Optional[str] = None
+    grade_config: Optional[dict] = None
 
 class TestOut(BaseModel):
     id: int
     name: str
     created_at: datetime
+    grading_method: Optional[str] = None
+    grade_config: Optional[dict] = None
     model_config = {"from_attributes": True}
 
 
@@ -108,6 +112,9 @@ class SessionListOut(BaseModel):
     student_order: List[int]
     graded_count: int
     total_count: int
+    review_count: int = 0
+    student_count: int = 0
+    has_grading: bool = False
 
 class SessionOrderUpdate(BaseModel):
     student_order: List[int]
@@ -129,4 +136,21 @@ class ScoreOut(BaseModel):
     question_id: int
     points: Optional[int]
     excluded: bool
+    model_config = {"from_attributes": True}
+
+
+# ── Student grades ────────────────────────────────────────────────────────────
+
+class StudentGradeUpsert(BaseModel):
+    grade: str       # "beheerst" | "expert" | "in_ontwikkeling"
+    is_manual: bool = False
+    review_done: bool = False
+
+class StudentGradeOut(BaseModel):
+    id: int
+    session_id: int
+    student_id: int
+    grade: str
+    is_manual: bool
+    review_done: bool
     model_config = {"from_attributes": True}

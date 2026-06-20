@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
 import RouteBadge from '../components/RouteBadge.jsx'
 import { pyramidLabel } from '../constants.js'
 
 export default function Grade() {
   const { id } = useParams()
+  const navigate = useNavigate()
 
   const [session, setSession] = useState(null)
   const [test, setTest] = useState(null)
@@ -389,6 +390,10 @@ export default function Grade() {
   if (!test || !session) return <div className="page"><p>Laden...</p></div>
 
   if (done) {
+    if (test.grading_method) {
+      navigate(`/sessions/${id}/review`, { replace: true })
+      return null
+    }
     return (
       <div className="page">
         <div className="card session-done">

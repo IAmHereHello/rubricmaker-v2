@@ -28,9 +28,13 @@ export default function SessionNew() {
     if (classes.length && !className) setClassName(classes[0])
   }, [classes.join(',')])
 
-  const inProgress = sessions.filter(s =>
-    s.total_count === 0 || s.graded_count < s.total_count
-  )
+  function sessionState(s) {
+    if (s.total_count === 0 || s.graded_count < s.total_count) return 'grading'
+    if (s.has_grading && s.review_count < s.student_count) return 'review'
+    return 'complete'
+  }
+
+  const inProgress = sessions.filter(s => sessionState(s) !== 'complete')
 
   async function start() {
     if (!testId || !className) { setError('Selecteer een toets en een klas.'); return }
@@ -65,24 +69,27 @@ export default function SessionNew() {
             </thead>
             <tbody>
               {inProgress.map(sess => {
-                const progressLabel = sess.total_count === 0
-                  ? 'Nog niet gestart'
-                  : `${sess.graded_count} / ${sess.total_count} beoordeeld`
+                const state = sessionState(sess)
+                const progressLabel = state === 'review'
+                  ? `Nakijken klaar – beoordelingsronde (${sess.review_count}/${sess.student_count})`
+                  : sess.total_count === 0
+                    ? 'Nog niet gestart'
+                    : `${sess.graded_count} / ${sess.total_count} beoordeeld`
+                const resumeUrl = state === 'review'
+                  ? `/sessions/${sess.id}/review`
+                  : `/sessions/${sess.id}/grade`
                 return (
                   <tr key={sess.id}>
                     <td>{new Date(sess.created_at).toLocaleDateString('nl-NL')}</td>
                     <td>{sess.test_name}</td>
                     <td>{sess.class_name}</td>
                     <td>
-                      <span style={{ color: sess.total_count === 0 ? '#888' : '#c07000', fontSize: 13 }}>
+                      <span style={{ color: state === 'review' ? '#1a6ecc' : sess.total_count === 0 ? '#888' : '#c07000', fontSize: 13 }}>
                         {progressLabel}
                       </span>
                     </td>
                     <td>
-                      <Link
-                        to={`/sessions/${sess.id}/grade`}
-                        className="btn btn-primary btn-sm"
-                      >
+                      <Link to={resumeUrl} className="btn btn-primary btn-sm">
                         Hervat →
                       </Link>
                     </td>
