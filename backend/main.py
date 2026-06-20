@@ -1,11 +1,27 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from .database import engine
 from . import models
 from .routers import students, tests, questions, sessions, scores, progress, reports
 
 models.Base.metadata.create_all(bind=engine)
+
+# Add columns introduced after initial schema without dropping existing data
+def _migrate_db():
+    with engine.connect() as conn:
+        for stmt in [
+            "ALTER TABLE questions ADD COLUMN learning_goal TEXT",
+            "ALTER TABLE questions ADD COLUMN learning_goal_threshold INTEGER",
+        ]:
+            try:
+                conn.execute(text(stmt))
+                conn.commit()
+            except Exception:
+                pass  # column already exists
+
+_migrate_db()
 
 app = FastAPI(title="Rubricmaker API", version="1.0.0")
 

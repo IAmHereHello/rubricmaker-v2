@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, useSearchParams, Link } from 'react-router-dom'
 import * as api from '../api.js'
 import RouteBadge from '../components/RouteBadge.jsx'
 import { LEVEL_LABELS } from '../constants.js'
@@ -10,6 +10,35 @@ function ScoreCell({ sc, maxScore }) {
   if (sc.excluded) return <span style={{ color: '#aaa', fontSize: 12 }}>n.v.t.</span>
   if (sc.points === null || sc.points === undefined) return <span className="text-muted">—</span>
   return <>{sc.points}<span className="text-muted">/{maxScore}</span></>
+}
+
+function goalBadge(achieved) {
+  return (
+    <span style={{ marginLeft: 5, fontWeight: 700, color: achieved ? '#15803d' : '#b91c1c' }}>
+      {achieved ? '✓' : '✗'}
+    </span>
+  )
+}
+
+function computeGoals(questions, scores, studentId) {
+  // Group questions by learning_goal name; a goal is achieved when ALL applicable
+  // questions in the group score >= their individual threshold.
+  const groups = {}
+  questions.forEach(q => {
+    if (!q.learning_goal || q.learning_goal_threshold == null) return
+    const sc = scores[`${studentId}|${q.id}`]
+    if (sc && sc.excluded) return  // not applicable for this student's route
+    if (!groups[q.learning_goal]) groups[q.learning_goal] = { total: 0, passed: 0 }
+    groups[q.learning_goal].total++
+    if (sc && sc.points !== null && sc.points >= q.learning_goal_threshold) {
+      groups[q.learning_goal].passed++
+    }
+  })
+  const names = Object.keys(groups).filter(n => groups[n].total > 0)
+  return {
+    achieved: names.filter(n => groups[n].passed === groups[n].total).length,
+    total: names.length,
+  }
 }
 
 function StudentView({ data, selectedId, setSelectedId }) {
@@ -25,6 +54,10 @@ function StudentView({ data, selectedId, setSelectedId }) {
       }
     })
   }
+
+  const { achieved: goalsAchieved, total: goalsTotal } = student
+    ? computeGoals(data.questions, data.scores, student.id)
+    : { achieved: 0, total: 0 }
 
   return (
     <div className="card">
@@ -50,6 +83,15 @@ function StudentView({ data, selectedId, setSelectedId }) {
             </span>
           </div>
         )}
+        {goalsTotal > 0 && (
+          <div style={{ alignSelf: 'flex-end', fontSize: 14 }}>
+            Leerdoelen:{' '}
+            <strong style={{ color: goalsAchieved === goalsTotal ? '#15803d' : goalsAchieved > 0 ? '#b45309' : '#b91c1c' }}>
+              {goalsAchieved} van {goalsTotal}
+            </strong>{' '}
+            behaald
+          </div>
+        )}
       </div>
 
       {student && (
@@ -66,10 +108,19 @@ function StudentView({ data, selectedId, setSelectedId }) {
           <tbody>
             {data.questions.map((q, i) => {
               const sc = data.scores[`${student.id}|${q.id}`]
+              const isGoal = !!q.learning_goal && q.learning_goal_threshold != null
+              const achieved = isGoal && sc && !sc.excluded && sc.points !== null && sc.points >= q.learning_goal_threshold
               return (
                 <tr key={q.id}>
                   <td style={{ color: '#888' }}>{i + 1}</td>
-                  <td>{q.description}</td>
+                  <td>
+                    {q.description}
+                    {isGoal && (
+                      <span style={{ marginLeft: 6, fontSize: 11, background: '#e8f0fc', color: '#1a6ecc', borderRadius: 3, padding: '1px 5px' }}>
+                        {q.learning_goal} ≥{q.learning_goal_threshold}
+                      </span>
+                    )}
+                  </td>
                   <td>{q.domain || '—'}</td>
                   <td>
                     <span className={`level-pill level-${q.pyramid_level}`}>
@@ -78,6 +129,7 @@ function StudentView({ data, selectedId, setSelectedId }) {
                   </td>
                   <td style={{ textAlign: 'center', fontWeight: 500 }}>
                     <ScoreCell sc={sc} maxScore={q.max_score} />
+                    {isGoal && sc && !sc.excluded && sc.points !== null && goalBadge(achieved)}
                   </td>
                 </tr>
               )
@@ -92,8 +144,32 @@ function StudentView({ data, selectedId, setSelectedId }) {
 function ClassView({ data }) {
   const colStyle = { textAlign: 'center', minWidth: 76, fontSize: 13 }
 
+  const goalQuestions = data.questions.filter(q => q.learning_goal && q.learning_goal_threshold != null)
+  const hasGoals = goalQuestions.length > 0
+
+  const studentGoals = {}
+  data.students.forEach(s => {
+    studentGoals[s.id] = computeGoals(data.questions, data.scores, s.id)
+  })
+
+  const uniqueGoalNames = [...new Set(goalQuestions.map(q => q.learning_goal))]
+  let classAvg = null
+  if (hasGoals) {
+    const studentsWithGoals = data.students.filter(s => studentGoals[s.id].total > 0)
+    if (studentsWithGoals.length > 0) {
+      const sumAchieved = studentsWithGoals.reduce((acc, s) => acc + studentGoals[s.id].achieved, 0)
+      classAvg = (sumAchieved / studentsWithGoals.length).toFixed(1)
+    }
+  }
+
   return (
     <div className="card">
+      {hasGoals && classAvg !== null && (
+        <div style={{ marginBottom: 14, fontSize: 14 }}>
+          Klasgemiddelde leerdoelen:{' '}
+          <strong>{classAvg} van {uniqueGoalNames.length}</strong> behaald
+        </div>
+      )}
       <div className="heatmap">
         <table>
           <thead>
@@ -103,6 +179,11 @@ function ClassView({ data }) {
                 <th key={s.id} style={colStyle}>
                   <div style={{ fontWeight: 700 }}>{s.name}</div>
                   <RouteBadge route={s.route} />
+                  {hasGoals && studentGoals[s.id].total > 0 && (
+                    <div style={{ fontSize: 11, marginTop: 2, color: '#555' }}>
+                      {studentGoals[s.id].achieved}/{studentGoals[s.id].total} LG
+                    </div>
+                  )}
                 </th>
               ))}
               <th style={{ ...colStyle, background: '#eef2f8', fontWeight: 700 }}>Gem.</th>
@@ -111,11 +192,17 @@ function ClassView({ data }) {
           <tbody>
             {data.questions.map((q, i) => {
               const avg = data.class_averages[String(q.id)]
+              const isGoal = !!q.learning_goal && q.learning_goal_threshold != null
               return (
                 <tr key={q.id}>
                   <td>
                     <span style={{ color: '#888', marginRight: 6, fontSize: 12 }}>{i + 1}.</span>
                     <span style={{ fontWeight: 500 }}>{q.description}</span>
+                    {isGoal && (
+                      <span style={{ marginLeft: 6, fontSize: 11, background: '#e8f0fc', color: '#1a6ecc', borderRadius: 3, padding: '1px 4px' }}>
+                        {q.learning_goal} ≥{q.learning_goal_threshold}
+                      </span>
+                    )}
                     {(q.domain || q.pyramid_level) && (
                       <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>
                         {q.domain}{q.domain && q.pyramid_level ? ' · ' : ''}
@@ -123,11 +210,16 @@ function ClassView({ data }) {
                       </div>
                     )}
                   </td>
-                  {data.students.map(s => (
-                    <td key={s.id} style={colStyle}>
-                      <ScoreCell sc={data.scores[`${s.id}|${q.id}`]} maxScore={q.max_score} />
-                    </td>
-                  ))}
+                  {data.students.map(s => {
+                    const sc = data.scores[`${s.id}|${q.id}`]
+                    const achieved = isGoal && sc && !sc.excluded && sc.points !== null && sc.points >= q.learning_goal_threshold
+                    return (
+                      <td key={s.id} style={colStyle}>
+                        <ScoreCell sc={sc} maxScore={q.max_score} />
+                        {isGoal && sc && !sc.excluded && sc.points !== null && goalBadge(achieved)}
+                      </td>
+                    )
+                  })}
                   <td style={{ ...colStyle, background: '#eef2f8', fontWeight: 600 }}>
                     {avg?.avg_points !== null && avg?.avg_points !== undefined
                       ? `${avg.avg_points}/${q.max_score}`
@@ -145,6 +237,7 @@ function ClassView({ data }) {
 
 export default function SessionReport() {
   const { id } = useParams()
+  const [searchParams] = useSearchParams()
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [view, setView] = useState('student')
@@ -156,7 +249,11 @@ export default function SessionReport() {
     api.getSessionReport(id)
       .then(d => {
         setData(d)
-        if (d.students.length > 0) setSelectedStudentId(d.students[0].id)
+        const paramId = searchParams.get('student') ? parseInt(searchParams.get('student')) : null
+        const initial = paramId && d.students.some(s => s.id === paramId)
+          ? paramId
+          : d.students[0]?.id ?? null
+        setSelectedStudentId(initial)
       })
       .catch(() => setError('Fout bij laden van rapport.'))
   }, [id])

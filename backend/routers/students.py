@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from ..database import get_db
 from ..models import Student
-from ..schemas import StudentCreate, StudentUpdate, StudentOut
+from ..schemas import StudentCreate, StudentUpdate, StudentOut, StudentImport
 
 router = APIRouter(prefix="/students", tags=["students"])
 
@@ -24,6 +24,29 @@ def create_student(student: StudentCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(obj)
     return obj
+
+
+@router.post("/import")
+def import_students(data: StudentImport, db: Session = Depends(get_db)):
+    created = 0
+    for name in data.names:
+        name = name.strip()
+        if not name:
+            continue
+        db.add(Student(name=name, class_name=data.class_name, route=data.route))
+        created += 1
+    db.commit()
+    return {"created": created}
+
+
+@router.delete("/class/{class_name}")
+def delete_class(class_name: str, db: Session = Depends(get_db)):
+    students = db.query(Student).filter(Student.class_name == class_name).all()
+    count = len(students)
+    for s in students:
+        db.delete(s)
+    db.commit()
+    return {"deleted": count}
 
 
 @router.put("/{id}", response_model=StudentOut)
