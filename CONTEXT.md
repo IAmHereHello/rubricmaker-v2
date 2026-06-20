@@ -173,7 +173,13 @@ Both progress endpoints filter out excluded scores and scores where `points IS N
 All report endpoints apply the same route-exclusion logic as the rest of the app: excluded and ungraded scores are ignored; axes with zero applicable questions yield `pct: null`, not `pct: 0`.
 
 ### In-progress session detection
-A session is considered **in-progress** (shown in "Lopende sessies") when `total_count === 0` (just created, Q1 not yet started) or `graded_count < total_count` (grading underway but not finished). A session where `graded_count === total_count > 0` is complete and no longer shown. `SessionListOut` in `schemas.py` carries the extra fields; the individual-session endpoints still use `SessionOut`.
+`GET /sessions` returns `graded_count` and `total_count` per session (via `SessionListOut` in `schemas.py`; individual-session endpoints still use `SessionOut`).
+
+**`total_count`** is computed from the expected number of non-excluded scores: for each question in the test, count how many students in `session.student_order` have a route included in `question.routes`. This gives the true denominator even for questions not yet reached (which have no Score rows at all). When `student_order` is empty (Q1 not yet started), `total_count` is 0.
+
+**`graded_count`** is the count of non-excluded Score rows with `points IS NOT NULL`.
+
+**In-progress rule (frontend):** a session appears in "Lopende sessies" when `total_count === 0` (Q1 not started) or `graded_count < total_count`. A session where `graded_count === total_count > 0` is considered complete and hidden.
 
 ### Schema migrations (`backend/main.py`)
 `_migrate_db()` runs at every startup and issues `ALTER TABLE ... ADD COLUMN` statements for columns added after the initial schema (`learning_goal TEXT`, `learning_goal_threshold INTEGER`). Each statement is wrapped in try/except so it is safely skipped if the column already exists. This means **no manual migration is needed on the Pi** for these columns — restarting the backend is sufficient.
