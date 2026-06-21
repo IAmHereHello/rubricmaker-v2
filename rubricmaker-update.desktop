@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Update Rubricmaker
+Comment=Haal de nieuwste versie op en herstart de app
+Exec=bash -c 'cd /home/michael/rubricgrader && ./update.sh; echo ""; echo "Druk op Enter om te sluiten..."; read'
+Icon=system-software-update
+Terminal=true
+Categories=Utility;
+StartupNotify=false

@@ -1,0 +1,14 @@
+[Unit]
+Description=Rubricmaker API
+After=network.target
+
+[Service]
+User=michael
+WorkingDirectory=/home/michael/rubricgrader
+ExecStart=/home/michael/rubricgrader/.venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

@@ -36,47 +36,68 @@ Via Vite's proxy stuurt de frontend alle `/api/...` requests automatisch door na
 
 ## Raspberry Pi 5 — productiedraaiing
 
-### Backend als systemd-service
+De `deploy/` map bevat alle bestanden die nodig zijn om de app automatisch te laten starten.
 
-Maak `/etc/systemd/system/rubricmaker-api.service`:
+### Eenmalige setup (eerste keer)
 
-```ini
-[Unit]
-Description=Rubricmaker API
-After=network.target
-
-[Service]
-User=pi
-WorkingDirectory=/home/pi/rubricmaker-v2
-ExecStart=/home/pi/.local/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-```
+Zorg dat het project gecloned is in `/home/michael/rubricgrader`, en draai dan:
 
 ```bash
-sudo systemctl enable rubricmaker-api
-sudo systemctl start rubricmaker-api
+bash /home/michael/rubricgrader/deploy/setup.sh
 ```
 
-### Frontend builden en serveren
+Dit doet het volgende automatisch:
+1. Maakt een Python `.venv` aan en installeert backend-dependencies
+2. Bouwt de frontend (`npm run build`)
+3. Installeert en activeert `rubricmaker-api` als systemd-service
+4. Installeert nginx, koppelt de config in `deploy/nginx-rubricmaker.conf`, en start nginx
+5. Plaatst een klikbare snelkoppeling op het bureaublad
+
+Na de setup start de app automatisch bij elke herstart van de Pi.
+
+### Hoe het werkt (architectuur)
+
+In productie draait er geen Vite dev-server. In plaats daarvan:
+
+- **FastAPI** draait op `127.0.0.1:8000` (alleen lokaal bereikbaar)
+- **nginx** luistert op poort 3000 en doet twee dingen:
+  - `/api/...` → doorsturen naar FastAPI op poort 8000 (zonder het `/api`-prefix)
+  - Al het overige → statische bestanden serveren vanuit `frontend/dist/`
+
+De SPA-routing (`try_files ... /index.html`) zorgt dat React Router correct werkt.
+
+### App bijwerken naar de nieuwste versie
+
+Dubbelklik op `Rubricmaker updaten` op het bureaublad, **of** draai via SSH:
 
 ```bash
-cd frontend
-npm run build
-# Serveer de dist/ map via nginx of een simpele static server
-npx serve dist -l 3000 -s
+cd /home/michael/rubricgrader
+./update.sh
 ```
 
-Of voeg een tweede systemd-service toe die `npx serve dist -l 3000 -s` draait.
+Het script haalt de nieuwste main-branch op, herbouwt de frontend, en herstart de backend.
+
+### Handmatige commando's
+
+```bash
+# Status controleren
+sudo systemctl status rubricmaker-api
+sudo systemctl status nginx
+
+# Logs bekijken
+journalctl -u rubricmaker-api -f
+
+# Handmatig herstarten
+sudo systemctl restart rubricmaker-api
+sudo systemctl reload nginx
+```
 
 ### Toegang via Tailscale
 
-Zorg dat Tailscale actief is op de Pi en gebruik het Tailscale-IP om de app vanaf een andere machine te bereiken:
+Zorg dat Tailscale actief is op de Pi en gebruik het Tailscale-IP:
 
-- Frontend: `http://<tailscale-ip>:3000`
-- API:       `http://<tailscale-ip>:8000/docs`
+- App: `http://<tailscale-ip>:3000`
+- API-docs: `http://<tailscale-ip>:8000/docs` (alleen voor debuggen)
 
 ## Pagina's
 
