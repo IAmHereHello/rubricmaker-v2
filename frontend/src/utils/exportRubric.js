@@ -9,7 +9,7 @@ export async function exportRubricsPDF(elements, filename) {
   let firstPage = true
   for (const el of elements) {
     if (!el) continue
-    const canvas = await html2canvas(el, { scale: 4, useCORS: true, logging: false })
+    const canvas = await html2canvas(el, { scale: 3, useCORS: true, logging: false })
     const imgData = canvas.toDataURL('image/png')
     const imgHeight = (canvas.height * pdfWidth) / canvas.width
 
