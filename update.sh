@@ -13,7 +13,7 @@ echo "=== Rubricmaker updater ==="
 echo ""
 
 echo "[1/3] Nieuwste code ophalen van GitHub..."
-git pull origin main
+git pull --autostash origin main
 
 echo ""
 echo "[2/3] Frontend bouwen..."
