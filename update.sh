@@ -3,6 +3,9 @@
 # Dit script wordt ook gebruikt door rubricmaker-update.desktop.
 set -e
 
+# Zorg dat npm/node vindbaar zijn als het script vanuit de desktop-launcher draait
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
