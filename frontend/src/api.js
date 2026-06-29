@@ -51,6 +51,12 @@ export const getSession = (id) => http.get(`/sessions/${id}`).then(r => r.data)
 export const setSessionOrder = (id, data) =>
   http.put(`/sessions/${id}/order`, data).then(r => r.data)
 
+export const dismissInhaler = (session_id, student_id) =>
+  http.post(`/sessions/${session_id}/dismiss-inhaler`, { student_id }).then(r => r.data)
+
+export const undismissInhaler = (session_id, student_id) =>
+  http.delete(`/sessions/${session_id}/dismiss-inhaler/${student_id}`).then(r => r.data)
+
 // ── Scores ────────────────────────────────────────────────────────────────────
 
 export const upsertScore = (data) => http.put('/scores', data).then(r => r.data)

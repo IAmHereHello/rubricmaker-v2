@@ -89,9 +89,11 @@ id             Integer   PK
 test_id        Integer   FK → tests.id
 class_name     String    not null
 created_at     DateTime  server default now()
-student_order  JSON      default []  — list of student IDs in grading order
+student_order       JSON      default []  — list of student IDs in grading order
+dismissed_inhalers  JSON      default []  — list of student IDs dismissed from the retake pool for this session
 ```
 `student_order` starts as an empty list and is populated after the first question is fully graded. Once set, it is the canonical order for all remaining questions.
+`dismissed_inhalers` stores students explicitly removed from the Inhalers tab for this session (e.g. student no longer needs to retake).
 Relationships: belongs to `Test`, has many `Score` (cascade delete).
 
 ### Score
@@ -159,10 +161,12 @@ All routers are registered in `backend/main.py`. CORS is open (`allow_origins=["
 ### `/sessions` — `backend/routers/sessions.py`
 | Method | Path | Description |
 |---|---|---|
-| GET | `/sessions` | List all sessions, newest first; each item includes `test_name`, `graded_count`, and `total_count` (non-excluded scores) |
-| POST | `/sessions` | Create a session (initialises `student_order` to `[]`) |
-| GET | `/sessions/{id}` | Get session + all its scores in one response |
+| GET | `/sessions` | List all sessions, newest first; each item includes `test_name`, `graded_count`, `total_count`, `dismissed_inhalers`, and `applicable_routes` |
+| POST | `/sessions` | Create a session (initialises `student_order` and `dismissed_inhalers` to `[]`) |
+| GET | `/sessions/{id}` | Get session + all its scores in one response; includes `dismissed_inhalers` |
 | PUT | `/sessions/{id}/order` | Set or replace the session's `student_order` |
+| POST | `/sessions/{id}/dismiss-inhaler` | Add a student ID to `dismissed_inhalers` (body: `{ student_id }`) |
+| DELETE | `/sessions/{id}/dismiss-inhaler/{student_id}` | Remove a student ID from `dismissed_inhalers` |
 
 ### `/grades` — `backend/routers/grades.py`
 | Method | Path | Description |
@@ -238,6 +242,8 @@ Source: `frontend/src/App.jsx`. Router is `BrowserRouter`. All API calls go thro
 | `SessionReport.jsx` | `/reports/session/:id` | Per-session report with "Per leerling" tab (student dropdown + per-question score table) and "Klassenoverzicht" tab (question × student matrix); excluded questions shown as "n.v.t."; PDF export; pre-selects a student from `?student=` query param; shows learning goal achievement (see Section 6) |
 | `StudentReport.jsx` | `/students/:id/report` | Two tabs: "Voortgang over tijd" (line charts per domain / per pyramid level across sessions) and "Radardiagram" (domain radar + level radar with multi-student overlay selector); PDF export; session rows in the timeline table are clickable and navigate to the session report with the student pre-selected |
 | `ClassRadar.jsx` | `/classes/:class_name/radar` | Domain radar + level radar, one line per route (oranje/geel/blauw) using `ROUTE_COLORS`; PDF export |
+| `Inhalers.jsx` | `/inhalers` | Retake overview: lists sessions that have absent students (in class but not in `student_order`, not dismissed, route has ≥1 applicable question). Per student: "Nakijken →" link and "Verwijderen" button to add to `dismissed_inhalers`. |
+| `InhalerGrade.jsx` | `/sessions/:id/inhaler/:studentId` | Single-student retake grading. Skips Q1 mode; student is known upfront. Questions presented one at a time; non-applicable questions auto-get excluded scores. On completion, if `grading_method` is set shows inline review (score table + grade buttons). After confirm (or directly if no review), student is appended to `student_order` and the page redirects to `/inhalers`. Supports resume: resumes at first applicable question without a score. |
 
 `/` redirects to `/students`.
 
@@ -339,6 +345,7 @@ When all questions are graded AND `test.grading_method` is set, `Grade.jsx` redi
 `_migrate_db()` runs at every startup. In addition to the `learning_goal` columns, it now also adds:
 - `ALTER TABLE tests ADD COLUMN grading_method TEXT`
 - `ALTER TABLE tests ADD COLUMN grade_config TEXT`
+- `ALTER TABLE sessions ADD COLUMN dismissed_inhalers TEXT`
 
 The `student_grades` table is created by `models.Base.metadata.create_all()` (SQLAlchemy creates it if it doesn't exist, safe for existing databases).
 

@@ -58,7 +58,8 @@ class Session(Base):
     test_id = Column(Integer, ForeignKey("tests.id"), nullable=False)
     class_name = Column(String, nullable=False)
     created_at = Column(DateTime, server_default=func.now())
-    student_order = Column(JSON, default=list)  # list[int] — student IDs in grading order
+    student_order = Column(JSON, default=list)        # list[int] — student IDs in grading order
+    dismissed_inhalers = Column(JSON, default=list)   # list[int] — student IDs dismissed from retakes
 
     test = relationship("Test", back_populates="sessions")
     scores = relationship("Score", back_populates="session", cascade="all, delete-orphan")

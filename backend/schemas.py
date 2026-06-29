@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, List
 from datetime import datetime
 
@@ -101,7 +101,13 @@ class SessionOut(BaseModel):
     class_name: str
     created_at: datetime
     student_order: List[int]
+    dismissed_inhalers: List[int] = []
     model_config = {"from_attributes": True}
+
+    @field_validator('student_order', 'dismissed_inhalers', mode='before')
+    @classmethod
+    def coerce_none_to_list(cls, v):
+        return v if v is not None else []
 
 class SessionListOut(BaseModel):
     id: int
@@ -115,9 +121,14 @@ class SessionListOut(BaseModel):
     review_count: int = 0
     student_count: int = 0
     has_grading: bool = False
+    dismissed_inhalers: List[int] = []
+    applicable_routes: List[str] = []
 
 class SessionOrderUpdate(BaseModel):
     student_order: List[int]
+
+class InhalerDismissBody(BaseModel):
+    student_id: int
 
 
 # ── Scores ────────────────────────────────────────────────────────────────────

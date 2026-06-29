@@ -11,6 +11,8 @@ import ClassOverview from './pages/ClassOverview.jsx'
 import ClassRadar from './pages/ClassRadar.jsx'
 import ReportHome from './pages/ReportHome.jsx'
 import SessionReport from './pages/SessionReport.jsx'
+import Inhalers from './pages/Inhalers.jsx'
+import InhalerGrade from './pages/InhalerGrade.jsx'
 
 export default function App() {
   return (
@@ -20,6 +22,7 @@ export default function App() {
         <NavLink to="/students">Leerlingen</NavLink>
         <NavLink to="/tests">Toetsen</NavLink>
         <NavLink to="/sessions/new">Nakijken</NavLink>
+        <NavLink to="/inhalers">Inhalers</NavLink>
         <NavLink to="/reports">Rapporten</NavLink>
       </nav>
       <Routes>
@@ -34,6 +37,8 @@ export default function App() {
         <Route path="/sessions/:id/review" element={<Review />} />
         <Route path="/classes/:class_name/overview" element={<ClassOverview />} />
         <Route path="/classes/:class_name/radar" element={<ClassRadar />} />
+        <Route path="/inhalers" element={<Inhalers />} />
+        <Route path="/sessions/:id/inhaler/:studentId" element={<InhalerGrade />} />
         <Route path="/reports" element={<ReportHome />} />
         <Route path="/reports/session/:id" element={<SessionReport />} />
       </Routes>

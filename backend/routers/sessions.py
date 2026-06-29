@@ -4,7 +4,7 @@ from typing import List
 
 from ..database import get_db
 from ..models import Session as SessionModel, Score, Test as TestModel, Student as StudentModel, StudentGrade
-from ..schemas import SessionCreate, SessionOut, SessionListOut, SessionOrderUpdate
+from ..schemas import SessionCreate, SessionOut, SessionListOut, SessionOrderUpdate, InhalerDismissBody
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -18,12 +18,9 @@ def list_sessions(db: DBSession = Depends(get_db)):
         order = s.student_order or []
 
         if not order:
-            # Q1 not yet started — session exists but no stack built yet
             total = 0
             graded = 0
         else:
-            # Compute expected graded scores: for each question, count students
-            # in the session whose route is in the question's routes list.
             stud_rows = db.query(StudentModel).filter(StudentModel.id.in_(order)).all()
             route_map = {st.id: st.route for st in stud_rows}
             questions = test.questions if test else []
@@ -45,6 +42,12 @@ def list_sessions(db: DBSession = Depends(get_db)):
                 StudentGrade.review_done.is_(True),
             ).count()
 
+        # Compute the set of routes that have at least one applicable question
+        applicable_routes = list(set(
+            r for q in (test.questions if test else [])
+            for r in (q.routes or [])
+        ))
+
         result.append(SessionListOut(
             id=s.id,
             test_id=s.test_id,
@@ -57,13 +60,15 @@ def list_sessions(db: DBSession = Depends(get_db)):
             review_count=review_count,
             student_count=len(order),
             has_grading=has_grading,
+            dismissed_inhalers=s.dismissed_inhalers or [],
+            applicable_routes=applicable_routes,
         ))
     return result
 
 
 @router.post("", response_model=SessionOut)
 def create_session(session: SessionCreate, db: DBSession = Depends(get_db)):
-    obj = SessionModel(**session.model_dump(), student_order=[])
+    obj = SessionModel(**session.model_dump(), student_order=[], dismissed_inhalers=[])
     db.add(obj)
     db.commit()
     db.refresh(obj)
@@ -84,6 +89,7 @@ def get_session(id: int, db: DBSession = Depends(get_db)):
         "class_name": obj.class_name,
         "created_at": obj.created_at,
         "student_order": obj.student_order or [],
+        "dismissed_inhalers": obj.dismissed_inhalers or [],
         "scores": [
             {
                 "id": s.id,
@@ -107,3 +113,27 @@ def set_student_order(id: int, body: SessionOrderUpdate, db: DBSession = Depends
     db.commit()
     db.refresh(obj)
     return obj
+
+
+@router.post("/{id}/dismiss-inhaler")
+def dismiss_inhaler(id: int, body: InhalerDismissBody, db: DBSession = Depends(get_db)):
+    obj = db.query(SessionModel).filter(SessionModel.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Sessie niet gevonden")
+    dismissed = list(obj.dismissed_inhalers or [])
+    if body.student_id not in dismissed:
+        dismissed.append(body.student_id)
+    obj.dismissed_inhalers = dismissed
+    db.commit()
+    return {"id": obj.id, "dismissed_inhalers": dismissed}
+
+
+@router.delete("/{id}/dismiss-inhaler/{student_id}")
+def undismiss_inhaler(id: int, student_id: int, db: DBSession = Depends(get_db)):
+    obj = db.query(SessionModel).filter(SessionModel.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Sessie niet gevonden")
+    dismissed = [sid for sid in (obj.dismissed_inhalers or []) if sid != student_id]
+    obj.dismissed_inhalers = dismissed
+    db.commit()
+    return {"id": obj.id, "dismissed_inhalers": dismissed}
