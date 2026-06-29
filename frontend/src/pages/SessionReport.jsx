@@ -4,7 +4,7 @@ import * as api from '../api.js'
 import RouteBadge from '../components/RouteBadge.jsx'
 import { LEVEL_LABELS } from '../constants.js'
 import { exportPDF } from '../utils/exportPDF.js'
-import { exportRubricsPDF } from '../utils/exportRubric.js'
+import { exportRubricsPDF, exportRubricsPerStudentPDF } from '../utils/exportRubric.js'
 import StudentRubric from '../components/StudentRubric.jsx'
 
 function ScoreCell({ sc, maxScore }) {
@@ -288,12 +288,20 @@ export default function SessionReport() {
     const timer = setTimeout(async () => {
       setIsExportingRubric(true)
       try {
-        const elements = exportTarget.studentIds.map(sid => rubricRefs.current[sid]).filter(Boolean)
         const date = data.session.created_at.slice(0, 10)
-        const filename = exportTarget.studentIds.length === 1
-          ? `rubric-${data.students.find(s => s.id === exportTarget.studentIds[0])?.name ?? 'leerling'}-${date}.pdf`
-          : `rubrieken-${data.session.class_name}-${date}.pdf`
-        await exportRubricsPDF(elements, filename)
+        if (exportTarget.perStudent) {
+          const pairs = exportTarget.studentIds.map(sid => {
+            const student = data.students.find(s => s.id === sid)
+            return { element: rubricRefs.current[sid], name: `rubric-${student?.name ?? sid}-${date}.pdf` }
+          })
+          await exportRubricsPerStudentPDF(pairs)
+        } else {
+          const elements = exportTarget.studentIds.map(sid => rubricRefs.current[sid]).filter(Boolean)
+          const filename = exportTarget.studentIds.length === 1
+            ? `rubric-${data.students.find(s => s.id === exportTarget.studentIds[0])?.name ?? 'leerling'}-${date}.pdf`
+            : `rubrieken-${data.session.class_name}-${date}.pdf`
+          await exportRubricsPDF(elements, filename)
+        }
       } finally {
         setExportTarget(null)
         setIsExportingRubric(false)
@@ -316,9 +324,9 @@ export default function SessionReport() {
     }
   }
 
-  function handleExportRubric(studentIds) {
+  function handleExportRubric(studentIds, perStudent = false) {
     rubricRefs.current = {}
-    setExportTarget({ studentIds })
+    setExportTarget({ studentIds, perStudent })
   }
 
   if (!data) return <div className="page">{error || 'Laden...'}</div>
@@ -342,6 +350,13 @@ export default function SessionReport() {
             disabled={isExportingRubric || !data?.students?.length}
           >
             {isExportingRubric ? 'Exporteren...' : 'Rubrieken exporteren'}
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => handleExportRubric(data.students.map(s => s.id), true)}
+            disabled={isExportingRubric || !data?.students?.length}
+          >
+            {isExportingRubric ? 'Exporteren...' : 'Per leerling exporteren'}
           </button>
           <Link to="/reports" className="btn btn-secondary">← Terug</Link>
         </div>
