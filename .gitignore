@@ -19,6 +19,9 @@ frontend/.vite/
 .DS_Store
 Thumbs.db
 
+# Secrets
+.env
+
 # Editors
 .vscode/
 .idea/
