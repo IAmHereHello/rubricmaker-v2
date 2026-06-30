@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import * as api from '../api.js'
 import RouteBadge from '../components/RouteBadge.jsx'
@@ -68,12 +68,31 @@ export default function Students() {
   const [deletingClass, setDeletingClass] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deleteError, setDeleteError] = useState('')
+  const [openClasses, setOpenClasses] = useState(new Set())
+  const editFormRef = useRef(null)
 
   useEffect(() => { load() }, [])
+
+  useEffect(() => {
+    if (editing !== null) {
+      requestAnimationFrame(() => {
+        editFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      })
+    }
+  }, [editing])
 
   async function load() {
     try { setStudents(await api.getStudents()) }
     catch { setError('Fout bij laden van leerlingen.') }
+  }
+
+  function toggleClass(cls) {
+    setOpenClasses(prev => {
+      const next = new Set(prev)
+      if (next.has(cls)) next.delete(cls)
+      else next.add(cls)
+      return next
+    })
   }
 
   function startNew() {
@@ -83,6 +102,7 @@ export default function Students() {
     setEditing(s)
     setForm({ name: s.name, class_name: s.class_name, route: s.route })
     setError(''); setSingleDisambig(null)
+    setOpenClasses(prev => { const next = new Set(prev); next.add(s.class_name); return next })
   }
   function cancel() { setEditing(null); setError(''); setSingleDisambig(null) }
 
@@ -203,7 +223,10 @@ export default function Students() {
     } catch { setImportError('Importeren mislukt.') }
   }
 
-  function startDeleteClass(cls) { setDeletingClass(cls); setDeleteConfirm(''); setDeleteError('') }
+  function startDeleteClass(cls) {
+    setDeletingClass(cls); setDeleteConfirm(''); setDeleteError('')
+    setOpenClasses(prev => { const next = new Set(prev); next.add(cls); return next })
+  }
   function cancelDeleteClass() { setDeletingClass(null); setDeleteConfirm(''); setDeleteError('') }
 
   async function doDeleteClass() {
@@ -347,7 +370,7 @@ export default function Students() {
 
       {/* ── Single student add/edit form ── */}
       {editing && !singleDisambig && (
-        <div className="card">
+        <div ref={editFormRef} className="card">
           <h2 style={{ marginBottom: 14, fontSize: 16 }}>
             {editing === 'new' ? 'Nieuwe leerling' : `${editing.name} bewerken`}
           </h2>
@@ -424,77 +447,100 @@ export default function Students() {
         <div className="card text-muted">Nog geen leerlingen.</div>
       )}
 
-      {classes.map(cls => (
-        <div key={cls} className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <strong style={{ fontSize: 15 }}>Klas {cls}</strong>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Link to={`/classes/${cls}/overview`} className="btn btn-secondary btn-sm">Klasoverzicht →</Link>
-              <button className="btn btn-danger btn-sm" onClick={() => startDeleteClass(cls)}>Klas verwijderen</button>
-            </div>
-          </div>
-
-          {deletingClass === cls && (
-            <div style={{ background: '#fff3f3', border: '1px solid #f5c6cb', borderRadius: 6, padding: 16, marginBottom: 16 }}>
-              <p style={{ margin: '0 0 4px', fontWeight: 600, color: '#721c24' }}>
-                Klas {cls} verwijderen — {byClass[cls].length} leerling{byClass[cls].length !== 1 ? 'en' : ''}
-              </p>
-              <p style={{ margin: '0 0 12px', fontSize: 13, color: '#721c24' }}>
-                Alle leerlingen en hun scores worden permanent verwijderd. Dit kan niet ongedaan worden gemaakt.
-              </p>
-              {deleteError && <div className="alert alert-error" style={{ marginBottom: 8 }}>{deleteError}</div>}
-              <div style={{ marginBottom: 8, fontSize: 13 }}>
-                Typ de huidige tijd (bijv. <strong>{nowHHMM()}</strong>) gevolgd door een spatie en het woord <strong>bevestig</strong>:
-              </div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <input
-                  type="text"
-                  value={deleteConfirm}
-                  onChange={e => { setDeleteConfirm(e.target.value); setDeleteError('') }}
-                  placeholder={`${nowHHMM()} bevestig`}
-                  style={{ width: 180 }}
-                  onKeyDown={e => e.key === 'Enter' && doDeleteClass()}
-                  autoFocus
-                />
-                <button className="btn btn-danger btn-sm" onClick={doDeleteClass}>
-                  Definitief verwijderen
-                </button>
-                <button className="btn btn-secondary btn-sm" onClick={cancelDeleteClass}>
-                  Annuleren
-                </button>
+      {classes.map(cls => {
+        const isOpen = openClasses.has(cls)
+        return (
+          <div key={cls} className="card">
+            <div
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', marginBottom: isOpen ? 12 : 0 }}
+              onClick={() => toggleClass(cls)}
+            >
+              <strong style={{ fontSize: 15 }}>
+                Klas {cls}
+                <span style={{ color: '#888', fontWeight: 400, fontSize: 13, marginLeft: 8 }}>
+                  ({byClass[cls].length} leerling{byClass[cls].length !== 1 ? 'en' : ''})
+                </span>
+              </strong>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <Link
+                  to={`/classes/${cls}/overview`}
+                  className="btn btn-secondary btn-sm"
+                  onClick={e => e.stopPropagation()}
+                >Klasoverzicht →</Link>
+                <button
+                  className="btn btn-danger btn-sm"
+                  onClick={e => { e.stopPropagation(); startDeleteClass(cls) }}
+                >Klas verwijderen</button>
+                <span style={{ color: '#888', fontSize: 13, minWidth: 16, textAlign: 'center' }}>{isOpen ? '▲' : '▼'}</span>
               </div>
             </div>
-          )}
 
-          <table>
-            <thead>
-              <tr>
-                <th>Naam</th>
-                <th>Route</th>
-                <th style={{ width: 140 }}>Acties</th>
-              </tr>
-            </thead>
-            <tbody>
-              {byClass[cls].map(s => (
-                <tr key={s.id}>
-                  <td>
-                    <Link to={`/students/${s.id}/progress`} style={{ color: '#1e3a5f', textDecoration: 'none', fontWeight: 600 }}>
-                      {s.name}
-                    </Link>
-                  </td>
-                  <td><RouteBadge route={s.route} /></td>
-                  <td>
-                    <div className="gap-8">
-                      <button className="btn btn-secondary btn-sm" onClick={() => startEdit(s)}>Bewerken</button>
-                      <button className="btn btn-danger btn-sm" onClick={() => remove(s.id)}>Verwijder</button>
+            {isOpen && (
+              <>
+                {deletingClass === cls && (
+                  <div style={{ background: '#fff3f3', border: '1px solid #f5c6cb', borderRadius: 6, padding: 16, marginBottom: 16 }}>
+                    <p style={{ margin: '0 0 4px', fontWeight: 600, color: '#721c24' }}>
+                      Klas {cls} verwijderen — {byClass[cls].length} leerling{byClass[cls].length !== 1 ? 'en' : ''}
+                    </p>
+                    <p style={{ margin: '0 0 12px', fontSize: 13, color: '#721c24' }}>
+                      Alle leerlingen en hun scores worden permanent verwijderd. Dit kan niet ongedaan worden gemaakt.
+                    </p>
+                    {deleteError && <div className="alert alert-error" style={{ marginBottom: 8 }}>{deleteError}</div>}
+                    <div style={{ marginBottom: 8, fontSize: 13 }}>
+                      Typ de huidige tijd (bijv. <strong>{nowHHMM()}</strong>) gevolgd door een spatie en het woord <strong>bevestig</strong>:
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ))}
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <input
+                        type="text"
+                        value={deleteConfirm}
+                        onChange={e => { setDeleteConfirm(e.target.value); setDeleteError('') }}
+                        placeholder={`${nowHHMM()} bevestig`}
+                        style={{ width: 180 }}
+                        onKeyDown={e => e.key === 'Enter' && doDeleteClass()}
+                        autoFocus
+                      />
+                      <button className="btn btn-danger btn-sm" onClick={doDeleteClass}>
+                        Definitief verwijderen
+                      </button>
+                      <button className="btn btn-secondary btn-sm" onClick={cancelDeleteClass}>
+                        Annuleren
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Naam</th>
+                      <th>Route</th>
+                      <th style={{ width: 140 }}>Acties</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {byClass[cls].map(s => (
+                      <tr key={s.id}>
+                        <td>
+                          <Link to={`/students/${s.id}/progress`} style={{ color: '#1e3a5f', textDecoration: 'none', fontWeight: 600 }}>
+                            {s.name}
+                          </Link>
+                        </td>
+                        <td><RouteBadge route={s.route} /></td>
+                        <td>
+                          <div className="gap-8">
+                            <button className="btn btn-secondary btn-sm" onClick={() => startEdit(s)}>Bewerken</button>
+                            <button className="btn btn-danger btn-sm" onClick={() => remove(s.id)}>Verwijder</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

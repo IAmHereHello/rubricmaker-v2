@@ -37,6 +37,8 @@ export default function Grade() {
   const q1ScoreRef = useRef(null)
   const q1AddRef = useRef(null)
   const prevQ1SelectedId = useRef(null)
+  const [q1EditingItemId, setQ1EditingItemId] = useState(null)
+  const [q1EditScoreVal, setQ1EditScoreVal] = useState('')
 
   // ── Initial load ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -165,6 +167,13 @@ export default function Grade() {
     }
     prevQ1SelectedId.current = newId
   }, [q1SelectedStudent?.id])
+
+  // Auto-select the last remaining student in Q1 mode
+  useEffect(() => {
+    if (q1Mode && q1AvailableStudents.length === 1) {
+      setQ1Name(q1AvailableStudents[0].name)
+    }
+  }, [q1Mode, q1AvailableStudents])
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
   async function persistScore() {
@@ -317,10 +326,44 @@ export default function Grade() {
     await finishQ1(session.student_order)
   }
 
+  function startQ1EditItem(item) {
+    setQ1EditingItemId(item.id)
+    setQ1EditScoreVal(item.points !== null ? String(item.points) : '')
+  }
+
+  async function saveQ1EditItem(item) {
+    if (!test?.questions[0]) return
+    const q1 = test.questions[0]
+    const pts = parseInt(q1EditScoreVal, 10)
+    if (!isNaN(pts) && pts >= 0 && pts <= q1.max_score) {
+      const saved = await api.upsertScore({
+        session_id: parseInt(id),
+        student_id: item.id,
+        question_id: q1.id,
+        points: pts,
+        excluded: false,
+      })
+      setScores(prev => ({ ...prev, [scoreKey(q1.id, item.id)]: saved }))
+    }
+    setQ1EditingItemId(null)
+  }
+
   // ── Regular navigation ───────────────────────────────────────────────────────
   async function handlePrev() {
     await persistScore()
-    if (sIdx > 0) setSIdx(s => s - 1)
+    if (sIdx > 0) {
+      setSIdx(s => s - 1)
+    } else if (qIdx > 0) {
+      let prevQIdx = qIdx - 1
+      while (prevQIdx > 0) {
+        const applicable = orderedStudents.filter(s => isApplicableForQuestion(s, test.questions[prevQIdx]))
+        if (applicable.length > 0) break
+        prevQIdx--
+      }
+      const prevApplicable = orderedStudents.filter(s => isApplicableForQuestion(s, test.questions[prevQIdx]))
+      setQIdx(prevQIdx)
+      setSIdx(Math.max(0, prevApplicable.length - 1))
+    }
   }
 
   async function handleNext() {
@@ -533,9 +576,46 @@ export default function Grade() {
                       padding: '4px 10px', background: '#f0f3f8', borderRadius: 6, fontSize: 13,
                     }}>
                       <span>{item.name}</span>
-                      <span style={{ fontWeight: 700, color: item.excluded ? '#888' : '#1e3a5f' }}>
-                        {item.excluded ? 'n.v.t.' : (item.points !== null ? item.points : '—')}
-                      </span>
+                      {q1EditingItemId === item.id ? (
+                        <>
+                          <input
+                            type="number"
+                            min={0}
+                            max={test.questions[0]?.max_score}
+                            value={q1EditScoreVal}
+                            onChange={e => setQ1EditScoreVal(e.target.value)}
+                            style={{ width: 50, fontSize: 12, padding: '1px 4px' }}
+                            autoFocus
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') saveQ1EditItem(item)
+                              if (e.key === 'Escape') setQ1EditingItemId(null)
+                            }}
+                          />
+                          <button
+                            className="btn btn-primary btn-sm"
+                            onClick={() => saveQ1EditItem(item)}
+                            style={{ padding: '1px 6px', fontSize: 11 }}
+                          >✓</button>
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => setQ1EditingItemId(null)}
+                            style={{ padding: '1px 6px', fontSize: 11 }}
+                          >✗</button>
+                        </>
+                      ) : (
+                        <>
+                          <span style={{ fontWeight: 700, color: item.excluded ? '#888' : '#1e3a5f' }}>
+                            {item.excluded ? 'n.v.t.' : (item.points !== null ? item.points : '—')}
+                          </span>
+                          {!item.excluded && (
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => startQ1EditItem(item)}
+                              style={{ padding: '1px 5px', fontSize: 11, lineHeight: 1 }}
+                            >✏</button>
+                          )}
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -648,7 +728,7 @@ export default function Grade() {
           </div>
 
           <div className="grade-nav-buttons">
-            <button className="btn btn-secondary" onClick={handlePrev} disabled={sIdx === 0}>
+            <button className="btn btn-secondary" onClick={handlePrev} disabled={sIdx === 0 && qIdx === 0}>
               ← Vorige leerling
             </button>
 
