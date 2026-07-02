@@ -94,7 +94,6 @@ export default function InhalerGrade() {
         setSession(sess)
         setTest(t)
         setStudent(stud)
-        setScoreMap(sm)
 
         // Already completed → back to inhalers
         if ((sess.student_order || []).includes(stud.id)) {
@@ -111,7 +110,28 @@ export default function InhalerGrade() {
         }
 
         if (resumeQ === -1) {
-          // All applicable questions already graded — go straight to review or finish
+          // All applicable questions already graded.
+          // Ensure excluded records exist for non-applicable questions so report
+          // data is complete for this student.
+          for (const q of t.questions) {
+            if (isApplicableForQuestion(stud, q)) continue
+            const key = `${q.id}-${stud.id}`
+            if (!sm[key]) {
+              const saved = await api.upsertScore({
+                session_id: sess.id,
+                student_id: stud.id,
+                question_id: q.id,
+                points: null,
+                excluded: true,
+              })
+              sm[key] = saved
+            }
+          }
+        }
+
+        setScoreMap(sm)
+
+        if (resumeQ === -1) {
           if (t.grading_method) {
             setPhase('review')
           } else {
