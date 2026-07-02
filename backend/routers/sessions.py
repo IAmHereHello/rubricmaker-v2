@@ -128,6 +128,18 @@ def dismiss_inhaler(id: int, body: InhalerDismissBody, db: DBSession = Depends(g
     return {"id": obj.id, "dismissed_inhalers": dismissed}
 
 
+@router.delete("/{id}")
+def delete_session(id: int, db: DBSession = Depends(get_db)):
+    obj = db.query(SessionModel).filter(SessionModel.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Sessie niet gevonden")
+    db.query(Score).filter(Score.session_id == id).delete()
+    db.query(StudentGrade).filter(StudentGrade.session_id == id).delete()
+    db.delete(obj)
+    db.commit()
+    return {"ok": True}
+
+
 @router.delete("/{id}/dismiss-inhaler/{student_id}")
 def undismiss_inhaler(id: int, student_id: int, db: DBSession = Depends(get_db)):
     obj = db.query(SessionModel).filter(SessionModel.id == id).first()
