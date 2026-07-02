@@ -48,6 +48,8 @@ export const createSession = (data) => http.post('/sessions', data).then(r => r.
 
 export const getSession = (id) => http.get(`/sessions/${id}`).then(r => r.data)
 
+export const deleteSession = (id) => http.delete(`/sessions/${id}`).then(r => r.data)
+
 export const setSessionOrder = (id, data) =>
   http.put(`/sessions/${id}/order`, data).then(r => r.data)
 

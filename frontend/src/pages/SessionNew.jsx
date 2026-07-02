@@ -36,6 +36,14 @@ export default function SessionNew() {
 
   const inProgress = sessions.filter(s => sessionState(s) !== 'complete')
 
+  async function handleDelete(sess) {
+    if (!window.confirm(`Sessie "${sess.test_name} – ${sess.class_name}" verwijderen? Dit kan niet ongedaan worden gemaakt.`)) return
+    try {
+      await api.deleteSession(sess.id)
+      setSessions(prev => prev.filter(s => s.id !== sess.id))
+    } catch { setError('Sessie verwijderen mislukt.') }
+  }
+
   async function start() {
     if (!testId || !className) { setError('Selecteer een toets en een klas.'); return }
     try {
@@ -90,10 +98,18 @@ export default function SessionNew() {
                         {progressLabel}
                       </span>
                     </td>
-                    <td>
+                    <td style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                       <Link to={resumeUrl} className="btn btn-primary btn-sm">
                         {notStarted ? 'Starten →' : 'Hervat →'}
                       </Link>
+                      <button
+                        className="btn btn-sm"
+                        style={{ color: '#b00', background: 'none', border: '1px solid #ddd' }}
+                        onClick={() => handleDelete(sess)}
+                        title="Sessie verwijderen"
+                      >
+                        Verwijderen
+                      </button>
                     </td>
                   </tr>
                 )
