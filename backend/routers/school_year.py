@@ -206,11 +206,13 @@ def advance_school_year(body: SchoolYearAdvanceRequest, db: DBSession = Depends(
     else:
         db.query(Student).delete(synchronize_session=False)
 
-    # Update class names for continuing students
+    # Update class names (and optionally routes) for continuing students
     for transfer in body.continuing_students:
         student = continuing_map.get(transfer.student_id)
         if student:
             student.class_name = transfer.new_class_name
+            if transfer.new_route:
+                student.route = transfer.new_route
 
     # Create new students
     for ns in body.new_students:

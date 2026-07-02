@@ -157,6 +157,7 @@ class ScoreOut(BaseModel):
 class SchoolYearStudentTransfer(BaseModel):
     student_id: int
     new_class_name: str
+    new_route: Optional[str] = None
 
 class SchoolYearNewStudent(BaseModel):
     name: str
