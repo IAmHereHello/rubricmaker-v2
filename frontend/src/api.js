@@ -95,3 +95,13 @@ export const getSessionGrades = (session_id) =>
 
 export const upsertStudentGrade = (session_id, student_id, data) =>
   http.put(`/grades/session/${session_id}/student/${student_id}`, data).then(r => r.data)
+
+// ── School year transition ─────────────────────────────────────────────────────
+
+export const getSchoolYearStatus = () =>
+  http.get('/school-year/status').then(r => r.data)
+
+export const advanceSchoolYear = (data) =>
+  http.post('/school-year/advance', data).then(r => r.data)
+
+export const getSchoolYearExportUrl = () => '/api/school-year/export-csv'

@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom'
 import Students from './pages/Students.jsx'
 import TestList from './pages/TestList.jsx'
@@ -13,8 +14,30 @@ import ReportHome from './pages/ReportHome.jsx'
 import SessionReport from './pages/SessionReport.jsx'
 import Inhalers from './pages/Inhalers.jsx'
 import InhalerGrade from './pages/InhalerGrade.jsx'
+import SchoolYearWizard from './pages/SchoolYearWizard.jsx'
+import * as api from './api.js'
 
 export default function App() {
+  const [schoolYearStatus, setSchoolYearStatus] = useState(null)
+  const [allStudents, setAllStudents] = useState([])
+  const [wizardOpen, setWizardOpen] = useState(false)
+
+  useEffect(() => {
+    const month = new Date().getMonth() + 1
+    if ([7, 8, 9].includes(month)) {
+      api.getSchoolYearStatus().then(setSchoolYearStatus).catch(() => {})
+      api.getStudents().then(setAllStudents).catch(() => {})
+    }
+  }, [])
+
+  function handleWizardDone() {
+    setWizardOpen(false)
+    setSchoolYearStatus(null)
+    window.location.reload()
+  }
+
+  const showButton = schoolYearStatus?.should_show
+
   return (
     <BrowserRouter>
       <nav>
@@ -24,7 +47,26 @@ export default function App() {
         <NavLink to="/sessions/new">Nakijken</NavLink>
         <NavLink to="/inhalers">Inhalers</NavLink>
         <NavLink to="/reports">Rapporten</NavLink>
+        {showButton && (
+          <button
+            onClick={() => setWizardOpen(true)}
+            style={{
+              marginLeft: 'auto',
+              padding: '5px 14px',
+              borderRadius: 5,
+              border: '2px solid #e65100',
+              background: '#fff3e0',
+              color: '#e65100',
+              fontWeight: 700,
+              fontSize: 13,
+              cursor: 'pointer',
+            }}
+          >
+            Nieuw schooljaar
+          </button>
+        )}
       </nav>
+
       <Routes>
         <Route path="/" element={<Navigate to="/students" replace />} />
         <Route path="/students" element={<Students />} />
@@ -42,6 +84,15 @@ export default function App() {
         <Route path="/reports" element={<ReportHome />} />
         <Route path="/reports/session/:id" element={<SessionReport />} />
       </Routes>
+
+      {wizardOpen && schoolYearStatus && (
+        <SchoolYearWizard
+          status={schoolYearStatus}
+          allStudents={allStudents}
+          onClose={() => setWizardOpen(false)}
+          onDone={handleWizardDone}
+        />
+      )}
     </BrowserRouter>
   )
 }
