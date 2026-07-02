@@ -139,6 +139,7 @@ class ScoreUpsert(BaseModel):
     question_id: int
     points: Optional[int] = None
     excluded: bool = False
+    comment: Optional[str] = None
 
 class ScoreOut(BaseModel):
     id: int
@@ -147,6 +148,7 @@ class ScoreOut(BaseModel):
     question_id: int
     points: Optional[int]
     excluded: bool
+    comment: Optional[str] = None
     model_config = {"from_attributes": True}
 
 

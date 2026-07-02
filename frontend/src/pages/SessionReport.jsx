@@ -258,6 +258,7 @@ export default function SessionReport() {
   const [grades, setGrades] = useState([])
   const [exportTarget, setExportTarget] = useState(null)
   const [isExportingRubric, setIsExportingRubric] = useState(false)
+  const [showClassAverage, setShowClassAverage] = useState(true)
   const reportRef = useRef(null)
   const rubricRefs = useRef({})
 
@@ -326,7 +327,7 @@ export default function SessionReport() {
 
   function handleExportRubric(studentIds, perStudent = false) {
     rubricRefs.current = {}
-    setExportTarget({ studentIds, perStudent })
+    setExportTarget({ studentIds, perStudent, showClassAverage })
   }
 
   if (!data) return <div className="page">{error || 'Laden...'}</div>
@@ -340,7 +341,15 @@ export default function SessionReport() {
             Klas {data.session.class_name} · {new Date(data.session.created_at).toLocaleDateString('nl-NL')}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#555', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={showClassAverage}
+              onChange={e => setShowClassAverage(e.target.checked)}
+            />
+            Klasgemiddelde tonen op rapport
+          </label>
           <button className="btn btn-secondary" onClick={handleExport} disabled={exporting}>
             {exporting ? 'Exporteren...' : 'Exporteer PDF'}
           </button>
@@ -411,6 +420,7 @@ export default function SessionReport() {
                   scores={data.scores}
                   classAverages={data.class_averages}
                   grade={gradeMap[sid] ?? null}
+                  showClassAverage={exportTarget.showClassAverage}
                 />
               </div>
             )

@@ -81,6 +81,11 @@ export default function Review() {
   const [editVal, setEditVal]   = useState('')
   const editRef = useRef(null)
 
+  // Inline comment editing
+  const [editCommentKey, setEditCommentKey] = useState(null)   // `${q.id}-${s.id}` or null
+  const [editCommentVal, setEditCommentVal] = useState('')
+  const editCommentRef = useRef(null)
+
   // ── Load ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     async function load() {
@@ -130,6 +135,10 @@ export default function Review() {
     if (editKey) editRef.current?.focus()
   }, [editKey])
 
+  useEffect(() => {
+    if (editCommentKey) editCommentRef.current?.focus()
+  }, [editCommentKey])
+
   // ── Current student ───────────────────────────────────────────────────────
   const student = students[sIdx]
 
@@ -155,6 +164,7 @@ export default function Review() {
         q, nr: i + 1,
         excluded: sc?.excluded ?? false,
         points: sc?.excluded ? null : (sc?.points ?? null),
+        comment: sc?.excluded ? '' : (sc?.comment ?? ''),
       }
     })
   }, [student?.id, scoreMap, test])
@@ -168,6 +178,21 @@ export default function Review() {
     }
     return { scored, max }
   }, [scoreRows])
+
+  // ── Normering (grade thresholds) for the student's route ─────────────────
+  const thresholdText = useMemo(() => {
+    if (!student || !test?.grading_method || !test?.grade_config) return null
+    const cfg = test.grade_config[student.route]
+    if (!cfg) return null
+    if (test.grading_method === 'points') {
+      return `Beheerst vanaf ${cfg.beheerst}%, Expert vanaf ${cfg.expert}%`
+    }
+    if (test.grading_method === 'goals') {
+      const label = n => `${n} leerdoel${n === 1 ? '' : 'en'}`
+      return `Beheerst vanaf ${label(cfg.beheerst)}, Expert vanaf ${label(cfg.expert)}`
+    }
+    return null
+  }, [student?.route, test?.grading_method, test?.grade_config])
 
   // ── Learning goal summary (for goals-based grading) ───────────────────────
   const goalSummary = useMemo(() => {
@@ -230,6 +255,33 @@ export default function Review() {
     }
     setEditKey(null)
     setEditVal('')
+  }
+
+  function startEditComment(q) {
+    const key = `${q.id}-${student.id}`
+    const sc = scoreMap[key]
+    if (sc?.excluded) return
+    setEditCommentKey(key)
+    setEditCommentVal(sc?.comment || '')
+  }
+
+  async function commitEditComment(q) {
+    const key = `${q.id}-${student.id}`
+    if (editCommentKey !== key) return
+    const sc = scoreMap[key]
+    try {
+      const saved = await api.upsertScore({
+        session_id: parseInt(id),
+        student_id: student.id,
+        question_id: q.id,
+        points: sc?.points ?? null,
+        excluded: sc?.excluded ?? false,
+        comment: editCommentVal.trim() || null,
+      })
+      setScoreMap(m => ({ ...m, [key]: saved }))
+    } catch { /* ignore transient save error */ }
+    setEditCommentKey(null)
+    setEditCommentVal('')
   }
 
   async function handleConfirm() {
@@ -326,6 +378,7 @@ export default function Review() {
                 {scoreRows.map(row => {
                   const key = `${row.q.id}-${student.id}`
                   const isEditing = editKey === key
+                  const isEditingComment = editCommentKey === key
                   return (
                     <tr key={row.q.id} style={{ borderTop: '1px solid #eef0f4' }}>
                       <td style={{ padding: '7px 12px', color: '#888' }}>V{row.nr}</td>
@@ -335,24 +388,57 @@ export default function Review() {
                       <td style={{ padding: '7px 12px', textAlign: 'right' }}>
                         {row.excluded ? (
                           <span className="text-muted">n.v.t.</span>
-                        ) : isEditing ? (
-                          <input
-                            ref={editRef}
-                            type="number" min={0} max={row.q.max_score}
-                            value={editVal}
-                            onChange={e => setEditVal(e.target.value)}
-                            onBlur={() => commitEditScore(row.q)}
-                            onKeyDown={e => { if (e.key === 'Enter') commitEditScore(row.q); if (e.key === 'Escape') { setEditKey(null); setEditVal('') } }}
-                            style={{ width: 60, textAlign: 'right' }}
-                          />
                         ) : (
-                          <span
-                            onClick={() => startEditScore(row.q)}
-                            style={{ cursor: 'pointer', fontWeight: 700, color: '#1e3a5f', borderBottom: '1px dashed #aaa', paddingBottom: 1 }}
-                            title="Klik om score te bewerken"
-                          >
-                            {row.points !== null ? row.points : <span className="text-muted">—</span>}
-                          </span>
+                          <>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
+                              {isEditing ? (
+                                <input
+                                  ref={editRef}
+                                  type="number" min={0} max={row.q.max_score}
+                                  value={editVal}
+                                  onChange={e => setEditVal(e.target.value)}
+                                  onBlur={() => commitEditScore(row.q)}
+                                  onKeyDown={e => { if (e.key === 'Enter') commitEditScore(row.q); if (e.key === 'Escape') { setEditKey(null); setEditVal('') } }}
+                                  style={{ width: 60, textAlign: 'right' }}
+                                />
+                              ) : (
+                                <span
+                                  onClick={() => startEditScore(row.q)}
+                                  style={{ cursor: 'pointer', fontWeight: 700, color: '#1e3a5f', borderBottom: '1px dashed #aaa', paddingBottom: 1 }}
+                                  title="Klik om score te bewerken"
+                                >
+                                  {row.points !== null ? row.points : <span className="text-muted">—</span>}
+                                </span>
+                              )}
+                              <button
+                                onClick={() => startEditComment(row.q)}
+                                title={row.comment || 'Opmerking toevoegen'}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 12, opacity: row.comment ? 1 : 0.3 }}
+                              >
+                                💬
+                              </button>
+                            </div>
+                            {isEditingComment ? (
+                              <input
+                                ref={editCommentRef}
+                                type="text"
+                                value={editCommentVal}
+                                onChange={e => setEditCommentVal(e.target.value)}
+                                onBlur={() => commitEditComment(row.q)}
+                                onKeyDown={e => { if (e.key === 'Enter') commitEditComment(row.q); if (e.key === 'Escape') { setEditCommentKey(null); setEditCommentVal('') } }}
+                                placeholder="Opmerking…"
+                                style={{ width: 200, fontSize: 12, marginTop: 4 }}
+                              />
+                            ) : row.comment && (
+                              <div
+                                onClick={() => startEditComment(row.q)}
+                                title="Klik om opmerking te bewerken"
+                                style={{ cursor: 'pointer', fontSize: 11, color: '#888', fontStyle: 'italic', marginTop: 2 }}
+                              >
+                                {row.comment}
+                              </div>
+                            )}
+                          </>
                         )}
                       </td>
                     </tr>
@@ -404,6 +490,12 @@ export default function Review() {
             <div style={{ fontSize: 12, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 12 }}>
               Beoordeling
             </div>
+
+            {thresholdText && (
+              <div className="text-muted" style={{ fontSize: 12, marginBottom: 12 }}>
+                Normering ({student.route}): {thresholdText}
+              </div>
+            )}
 
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
               {GRADE_OPTIONS.map(opt => {

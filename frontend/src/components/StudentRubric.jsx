@@ -23,7 +23,21 @@ function computeGoals(questions, scores, studentId) {
   return groups
 }
 
-export default function StudentRubric({ student, test, session, questions, scores, classAverages, grade }) {
+function formatThreshold(test, route) {
+  if (!test?.grading_method || !test?.grade_config) return null
+  const cfg = test.grade_config[route]
+  if (!cfg) return null
+  if (test.grading_method === 'points') {
+    return `Beheerst vanaf ${cfg.beheerst}%, Expert vanaf ${cfg.expert}%`
+  }
+  if (test.grading_method === 'goals') {
+    const label = n => `${n} leerdoel${n === 1 ? '' : 'en'}`
+    return `Beheerst vanaf ${label(cfg.beheerst)}, Expert vanaf ${label(cfg.expert)}`
+  }
+  return null
+}
+
+export default function StudentRubric({ student, test, session, questions, scores, classAverages, grade, showClassAverage = true }) {
   const applicable = questions.filter(q => !scores[`${student.id}|${q.id}`]?.excluded)
 
   let totalScored = 0, totalMax = 0
@@ -50,6 +64,7 @@ export default function StudentRubric({ student, test, session, questions, score
     }
   })
 
+  const thresholdText = formatThreshold(test, student.route)
   const routeColor = ROUTE_COLORS[student.route] || '#6b7280'
   const date = new Date(session.created_at).toLocaleDateString('nl-NL', {
     day: 'numeric', month: 'long', year: 'numeric',
@@ -95,12 +110,19 @@ export default function StudentRubric({ student, test, session, questions, score
             )}
           </div>
         </div>
-        <RouteBadge route={student.route} />
-        {grade?.grade && GRADE_STYLES[grade.grade] && (
-          <span style={{ padding: '4px 12px', borderRadius: 4, fontWeight: 700, fontSize: 12, ...GRADE_STYLES[grade.grade] }}>
-            {GRADE_LABELS[grade.grade]}
-          </span>
-        )}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <RouteBadge route={student.route} />
+            {grade?.grade && GRADE_STYLES[grade.grade] && (
+              <span style={{ padding: '4px 12px', borderRadius: 4, fontWeight: 700, fontSize: 12, ...GRADE_STYLES[grade.grade] }}>
+                {GRADE_LABELS[grade.grade]}
+              </span>
+            )}
+          </div>
+          {thresholdText && (
+            <div style={{ fontSize: 10, color: '#9ca3af', textAlign: 'right' }}>{thresholdText}</div>
+          )}
+        </div>
       </div>
 
       {/* Score table */}
@@ -112,7 +134,9 @@ export default function StudentRubric({ student, test, session, questions, score
             <th style={{ padding: '7px 10px', fontWeight: 600, color: '#374151', textAlign: 'left', width: 90 }}>Domein</th>
             <th style={{ padding: '7px 10px', fontWeight: 600, color: '#374151', textAlign: 'left', width: 150 }}>Niveau</th>
             <th style={{ padding: '7px 10px', fontWeight: 600, color: '#374151', textAlign: 'center', width: 82 }}>Score/Max</th>
-            <th style={{ padding: '7px 10px', fontWeight: 600, color: '#374151', textAlign: 'center', width: 58 }}>Gem.</th>
+            {showClassAverage && (
+              <th style={{ padding: '7px 10px', fontWeight: 600, color: '#374151', textAlign: 'center', width: 58 }}>Gem.</th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -131,6 +155,11 @@ export default function StudentRubric({ student, test, session, questions, score
                       {q.learning_goal} ≥{q.learning_goal_threshold}
                     </span>
                   )}
+                  {sc?.comment && (
+                    <div style={{ fontSize: 11, color: '#9ca3af', fontStyle: 'italic', marginTop: 2 }}>
+                      {sc.comment}
+                    </div>
+                  )}
                 </td>
                 <td style={{ padding: '6px 10px', color: '#6b7280' }}>{q.domain || '—'}</td>
                 <td style={{ padding: '6px 10px', color: '#6b7280' }}>{LEVEL_LABELS[q.pyramid_level] || q.pyramid_level || '—'}</td>
@@ -140,9 +169,11 @@ export default function StudentRubric({ student, test, session, questions, score
                     <span style={{ marginLeft: 3, color: passed ? '#15803d' : '#b91c1c' }}>{passed ? '✓' : '✗'}</span>
                   )}
                 </td>
-                <td style={{ padding: '6px 10px', textAlign: 'center', color: '#6b7280' }}>
-                  {avg?.avg_points != null ? avg.avg_points : '—'}
-                </td>
+                {showClassAverage && (
+                  <td style={{ padding: '6px 10px', textAlign: 'center', color: '#6b7280' }}>
+                    {avg?.avg_points != null ? avg.avg_points : '—'}
+                  </td>
+                )}
               </tr>
             )
           })}
@@ -150,7 +181,7 @@ export default function StudentRubric({ student, test, session, questions, score
       </table>
 
       {/* Bar chart: student score vs class average per applicable question */}
-      {hasBarData && (
+      {showClassAverage && hasBarData && (
         <div>
           <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>
             Scoreverdeling per vraag

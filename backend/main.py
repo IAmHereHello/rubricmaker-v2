@@ -17,6 +17,7 @@ def _migrate_db():
             "ALTER TABLE tests ADD COLUMN grading_method TEXT",
             "ALTER TABLE tests ADD COLUMN grade_config TEXT",
             "ALTER TABLE sessions ADD COLUMN dismissed_inhalers TEXT",
+            "ALTER TABLE scores ADD COLUMN comment TEXT",
         ]:
             try:
                 conn.execute(text(stmt))

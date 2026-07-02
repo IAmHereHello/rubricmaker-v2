@@ -75,6 +75,7 @@ class Score(Base):
     question_id = Column(Integer, ForeignKey("questions.id"), nullable=False)
     points = Column(Integer, nullable=True)  # null = not yet graded
     excluded = Column(Boolean, default=False)
+    comment = Column(String, nullable=True)
 
     session = relationship("Session", back_populates="scores")
     student = relationship("Student", back_populates="scores")
