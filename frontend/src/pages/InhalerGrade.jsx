@@ -171,14 +171,16 @@ export default function InhalerGrade() {
     if (isNaN(points) || points < 0 || points > currentQuestion.max_score) return
     setSaving(true)
     try {
+      const key = `${currentQuestion.id}-${student.id}`
       const saved = await api.upsertScore({
         session_id: parseInt(id),
         student_id: student.id,
         question_id: currentQuestion.id,
         points,
         excluded: false,
+        comment: scoreMap[key]?.comment ?? null,
       })
-      setScoreMap(prev => ({ ...prev, [`${currentQuestion.id}-${student.id}`]: saved }))
+      setScoreMap(prev => ({ ...prev, [key]: saved }))
     } finally {
       setSaving(false)
     }
@@ -258,14 +260,16 @@ export default function InhalerGrade() {
     const pts = parseInt(editVal, 10)
     if (!isNaN(pts) && pts >= 0 && pts <= q.max_score) {
       try {
+        const key = `${q.id}-${student.id}`
         const saved = await api.upsertScore({
           session_id: parseInt(id),
           student_id: student.id,
           question_id: q.id,
           points: pts,
           excluded: false,
+          comment: scoreMap[key]?.comment ?? null,
         })
-        setScoreMap(m => ({ ...m, [`${q.id}-${student.id}`]: saved }))
+        setScoreMap(m => ({ ...m, [key]: saved }))
         if (!isManual) setManualGrade(null)
       } catch {}
     }

@@ -84,6 +84,7 @@ def session_report(session_id: int, db: Session = Depends(get_db)):
         score_map.setdefault(sc.student_id, {})[sc.question_id] = {
             "points": sc.points,
             "excluded": sc.excluded,
+            "comment": sc.comment,
         }
 
     class_avgs = {}
@@ -113,7 +114,12 @@ def session_report(session_id: int, db: Session = Depends(get_db)):
             "created_at": session.created_at.isoformat(),
             "test_id": session.test_id,
         },
-        "test": {"id": test.id, "name": test.name},
+        "test": {
+            "id": test.id,
+            "name": test.name,
+            "grading_method": test.grading_method,
+            "grade_config": test.grade_config,
+        },
         "questions": [
             {
                 "id": q.id,

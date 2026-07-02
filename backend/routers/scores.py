@@ -24,6 +24,7 @@ def upsert_score(score: ScoreUpsert, db: Session = Depends(get_db)):
     if existing:
         existing.points = score.points
         existing.excluded = score.excluded
+        existing.comment = score.comment
         db.commit()
         db.refresh(existing)
         return existing

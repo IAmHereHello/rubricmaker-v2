@@ -21,12 +21,15 @@ export default function Grade() {
   const [qIdx, setQIdx] = useState(0)
   const [sIdx, setSIdx] = useState(0)
   const [inputVal, setInputVal] = useState('')
+  const [commentVal, setCommentVal] = useState('')
+  const [showComment, setShowComment] = useState(false)
   const [showPrev, setShowPrev] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
   const [skipNotice, setSkipNotice] = useState('')
   const scoreInputRef = useRef(null)
+  const commentInputRef = useRef(null)
 
   // Q1 type-select state
   const [q1Mode, setQ1Mode] = useState(false)
@@ -138,7 +141,14 @@ export default function Grade() {
         ? String(existing.points)
         : ''
     )
+    setCommentVal(existing?.comment || '')
+    setShowComment(false)
   }, [qIdx, sIdx, currentQuestion?.id, currentStudent?.id])
+
+  // Focus the comment input when it's opened
+  useEffect(() => {
+    if (showComment) commentInputRef.current?.focus()
+  }, [showComment])
 
   // Auto-focus score input when student/question changes (regular mode)
   useEffect(() => {
@@ -189,11 +199,16 @@ export default function Grade() {
         question_id: currentQuestion.id,
         points,
         excluded: false,
+        comment: commentVal.trim() || null,
       })
       setScores(prev => ({ ...prev, [scoreKey(currentQuestion.id, currentStudent.id)]: saved }))
     } finally {
       setSaving(false)
     }
+  }
+
+  function toggleComment() {
+    setShowComment(v => !v)
   }
 
   async function createExcludedScores(question, allStudents) {
@@ -423,6 +438,7 @@ export default function Grade() {
           : sc?.points !== null && sc?.points !== undefined
           ? sc.points
           : '—',
+        comment: sc?.comment || '',
       }
     })
   }, [currentStudent?.id, qIdx, scores, test])
@@ -708,7 +724,7 @@ export default function Grade() {
             )}
           </div>
 
-          <div className="grade-score-row">
+          <div className="grade-score-row" style={{ marginBottom: showComment ? 8 : 24 }}>
             <input
               ref={scoreInputRef}
               type="number"
@@ -721,11 +737,41 @@ export default function Grade() {
                 if (e.key === 'Enter') isLastStudent ? handleNextQuestion() : handleNext()
                 if (e.key === 'ArrowRight') isLastStudent ? handleNextQuestion() : handleNext()
                 if (e.key === 'ArrowLeft') handlePrev()
+                if ((e.ctrlKey || e.metaKey) && e.key === '/') { e.preventDefault(); toggleComment() }
               }}
             />
             <span className="grade-score-max">/ {currentQuestion.max_score}</span>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={toggleComment}
+              title="Opmerking toevoegen (Ctrl+/)"
+            >
+              {commentVal ? '💬 opmerking' : '+ opmerking'}
+            </button>
             {saving && <span className="text-muted">Opslaan...</span>}
           </div>
+
+          {showComment && (
+            <div style={{ marginBottom: 24 }}>
+              <input
+                ref={commentInputRef}
+                type="text"
+                value={commentVal}
+                onChange={e => setCommentVal(e.target.value)}
+                placeholder="Opmerking voor deze leerling (optioneel)…"
+                style={{ width: '100%' }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') isLastStudent ? handleNextQuestion() : handleNext()
+                  if (e.key === 'Escape' || ((e.ctrlKey || e.metaKey) && e.key === '/')) {
+                    e.preventDefault()
+                    setShowComment(false)
+                    scoreInputRef.current?.focus()
+                  }
+                }}
+              />
+            </div>
+          )}
 
           <div className="grade-nav-buttons">
             <button className="btn btn-secondary" onClick={handlePrev} disabled={sIdx === 0 && qIdx === 0}>
@@ -778,7 +824,10 @@ export default function Grade() {
                           <td style={{ padding: '4px 6px' }}>{ps.nr}</td>
                           <td style={{ padding: '4px 6px' }}>{ps.domain || '—'}</td>
                           <td style={{ padding: '4px 6px' }}>{ps.max_score}</td>
-                          <td style={{ padding: '4px 6px', fontWeight: 700 }}>{ps.points}</td>
+                          <td style={{ padding: '4px 6px', fontWeight: 700 }}>
+                            {ps.points}
+                            {ps.comment && <span title={ps.comment} style={{ marginLeft: 4, fontWeight: 400 }}>💬</span>}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
