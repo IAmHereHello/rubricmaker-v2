@@ -237,12 +237,14 @@ export default function Review() {
     const pts = parseInt(editVal, 10)
     if (!isNaN(pts) && pts >= 0 && pts <= q.max_score) {
       try {
+        const sc = scoreMap[`${q.id}-${student.id}`]
         const saved = await api.upsertScore({
           session_id: parseInt(id),
           student_id: student.id,
           question_id: q.id,
           points: pts,
           excluded: false,
+          comment: sc?.comment ?? null,
         })
         setScoreMap(m => ({ ...m, [`${q.id}-${student.id}`]: saved }))
         // Re-derive grade if not manually overridden
