@@ -14,6 +14,7 @@ class Student(Base):
 
     scores = relationship("Score", back_populates="student", cascade="all, delete-orphan")
     grades = relationship("StudentGrade", back_populates="student", cascade="all, delete-orphan")
+    year_snapshots = relationship("StudentYearSnapshot", back_populates="student", cascade="all, delete-orphan")
 
 
 class Test(Base):
@@ -94,3 +95,16 @@ class StudentGrade(Base):
 
     session = relationship("Session", back_populates="grades")
     student = relationship("Student", back_populates="grades")
+
+
+class StudentYearSnapshot(Base):
+    __tablename__ = "student_year_snapshots"
+
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+    school_year = Column(String, nullable=False)   # e.g. "2024-2025"
+    radar_data = Column(JSON, nullable=False)       # [{domain, pyramid_level, scored, max, percentage}]
+    grades = Column(JSON, nullable=True)            # [{test_name, grade, date}]
+    created_at = Column(DateTime, server_default=func.now())
+
+    student = relationship("Student", back_populates="year_snapshots")

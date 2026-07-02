@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Student, Score, Question, Session as SessionModel, StudentGrade
+from ..models import Student, Score, Question, Session as SessionModel, StudentGrade, StudentYearSnapshot
 
 router = APIRouter(prefix="/progress", tags=["progress"])
 
@@ -71,6 +71,21 @@ def student_progress(student_id: int, db: Session = Depends(get_db)):
     for sess in sessions_map.values():
         sess["grade"] = grade_map.get(sess["session_id"])
 
+    snapshots = (
+        db.query(StudentYearSnapshot)
+        .filter(StudentYearSnapshot.student_id == student_id)
+        .order_by(StudentYearSnapshot.school_year)
+        .all()
+    )
+    historical_snapshots = [
+        {
+            "school_year": s.school_year,
+            "domain_pyramid": s.radar_data.get("domain_pyramid", []),
+            "grades": s.grades or [],
+        }
+        for s in snapshots
+    ]
+
     return {
         "student": {
             "id": student.id,
@@ -80,6 +95,7 @@ def student_progress(student_id: int, db: Session = Depends(get_db)):
         },
         "domain_pyramid": domain_pyramid_list,
         "sessions": sorted(sessions_map.values(), key=lambda x: x["created_at"]),
+        "historical_snapshots": historical_snapshots,
     }
 
 

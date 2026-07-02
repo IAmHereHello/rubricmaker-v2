@@ -42,7 +42,7 @@ export default function StudentProgress() {
 
   if (!data) return <div className="page">{error || 'Laden...'}</div>
 
-  const { student, domain_pyramid, sessions } = data
+  const { student, domain_pyramid, sessions, historical_snapshots = [] } = data
 
   // Build unique domains
   const domains = [...new Set(domain_pyramid.map(r => r.domain))].sort()
@@ -104,6 +104,64 @@ export default function StudentProgress() {
           </div>
         )}
       </div>
+
+      {/* Historical snapshots */}
+      {historical_snapshots.map(snap => {
+        const snapDomains = [...new Set(snap.domain_pyramid.map(r => r.domain))].sort()
+        const snapHeatmap = {}
+        for (const r of snap.domain_pyramid) snapHeatmap[`${r.domain}|${r.pyramid_level}`] = r
+        return (
+          <div key={snap.school_year} className="card" style={{ opacity: 0.85 }}>
+            <h2 style={{ fontSize: 15, marginBottom: 4, color: '#555' }}>
+              Schooljaar {snap.school_year}
+              <span style={{ fontWeight: 400, fontSize: 12, marginLeft: 8, color: '#aaa' }}>historisch</span>
+            </h2>
+            {snapDomains.length === 0 ? (
+              <p className="text-muted">Geen data opgeslagen voor dit schooljaar.</p>
+            ) : (
+              <div className="heatmap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Domein</th>
+                      {LEVELS.map(l => <th key={l}>{pyramidLabel(l)}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {snapDomains.map(domain => (
+                      <tr key={domain}>
+                        <td>{domain}</td>
+                        {LEVELS.map(level => {
+                          const cell = snapHeatmap[`${domain}|${level}`]
+                          return (
+                            <td key={level} className={pctColor(cell?.percentage)}>
+                              {cell ? `${cell.percentage}%` : '—'}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {snap.grades && snap.grades.length > 0 && (
+              <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {snap.grades.map((g, i) => (
+                  <span key={i} style={{
+                    fontSize: 12, padding: '2px 8px', borderRadius: 4,
+                    background: g.grade === 'expert' ? '#e8f5e9' : g.grade === 'beheerst' ? '#e8f0fc' : '#fff3e0',
+                    color: g.grade === 'expert' ? '#2e7d32' : g.grade === 'beheerst' ? '#1a6ecc' : '#c07000',
+                    fontWeight: 600,
+                  }}>
+                    {g.test_name}: {g.grade === 'expert' ? 'Expert' : g.grade === 'beheerst' ? 'Beheerst' : 'In Ontwikkeling'}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
 
       {/* Session timeline */}
       <div className="card">

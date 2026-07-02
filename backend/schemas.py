@@ -152,6 +152,24 @@ class ScoreOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ── School year transition ────────────────────────────────────────────────────
+
+class SchoolYearStudentTransfer(BaseModel):
+    student_id: int
+    new_class_name: str
+    new_route: Optional[str] = None
+
+class SchoolYearNewStudent(BaseModel):
+    name: str
+    class_name: str
+    route: str = "geel"
+
+class SchoolYearAdvanceRequest(BaseModel):
+    outgoing_year: str                                    # "2024-2025"
+    continuing_students: List[SchoolYearStudentTransfer]  # kept students with new class name
+    new_students: List[SchoolYearNewStudent]
+
+
 # ── Student grades ────────────────────────────────────────────────────────────
 
 class StudentGradeUpsert(BaseModel):
