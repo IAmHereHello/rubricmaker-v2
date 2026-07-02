@@ -542,7 +542,7 @@ export default function Review() {
             <button className="btn btn-secondary" onClick={handlePrev} disabled={sIdx === 0}>
               ← Vorige
             </button>
-            <button className="btn btn-primary" onClick={handleConfirm} disabled={saving || !displayGrade}>
+            <button className="btn btn-primary" onClick={handleConfirm} disabled={saving || !displayGrade || !!editKey}>
               {saving ? 'Opslaan…' : sIdx === students.length - 1 ? 'Afronden ✓' : 'Bevestigen →'}
             </button>
           </div>
