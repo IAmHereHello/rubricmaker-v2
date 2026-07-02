@@ -230,7 +230,7 @@ export default function Grade() {
 
   // ── Q1 handlers ──────────────────────────────────────────────────────────────
   async function handleQ1Submit() {
-    if (!q1SelectedStudent || !test?.questions[0]) return
+    if (q1Saving || !q1SelectedStudent || !test?.questions[0]) return
     const points = parseInt(q1ScoreVal, 10)
     if (isNaN(points) || points < 0 || points > test.questions[0].max_score) return
 
@@ -261,7 +261,7 @@ export default function Grade() {
   }
 
   async function handleQ1AddToStack() {
-    if (!q1SelectedStudent || !test?.questions[0]) return
+    if (q1Saving || !q1SelectedStudent || !test?.questions[0]) return
 
     setQ1Saving(true)
 
