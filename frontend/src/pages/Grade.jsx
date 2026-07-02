@@ -458,7 +458,12 @@ export default function Grade() {
   if (q1Mode) {
     const q1 = test.questions[0]
     const enteredCount = session?.student_order?.length || 0
-    const totalCount = students.length
+    const q1ApplicableStudents = students.filter(s => (q1.routes || []).includes(s.route))
+    const q1TotalApplicable = q1ApplicableStudents.length
+    const q1EnteredApplicable = (session?.student_order || []).filter(sid => {
+      const s = students.find(st => st.id === sid)
+      return s && (q1.routes || []).includes(s.route)
+    }).length
     const q1IsApplicable = !q1SelectedStudent || isApplicableForQuestion(q1SelectedStudent, q1)
 
     return (
@@ -470,7 +475,7 @@ export default function Grade() {
             background: '#1e3a5f',
             borderRadius: 6,
             height: 6,
-            width: `${(enteredCount / Math.max(totalCount, 1) / test.questions.length) * 100}%`,
+            width: `${(q1EnteredApplicable / Math.max(q1TotalApplicable, 1) / test.questions.length) * 100}%`,
             transition: 'width .3s',
           }} />
         </div>
@@ -495,7 +500,7 @@ export default function Grade() {
               <div style={{ fontSize: 13, fontWeight: 600, color: '#555', marginBottom: 6 }}>
                 Naam leerling
                 <span className="text-muted" style={{ fontWeight: 400, marginLeft: 8 }}>
-                  ({enteredCount} van {totalCount} ingevoerd)
+                  ({q1EnteredApplicable} van {q1TotalApplicable} ingevoerd)
                 </span>
               </div>
               <input
@@ -655,6 +660,9 @@ export default function Grade() {
                 </div>
               ))}
             </div>
+            {test.grading_method && test.grade_config && (
+              <NormeringCard gradeConfig={test.grade_config} gradingMethod={test.grading_method} />
+            )}
           </div>
         </div>
       </div>
@@ -807,8 +815,44 @@ export default function Grade() {
               )
             })}
           </div>
+          {test.grading_method && test.grade_config && (
+            <NormeringCard gradeConfig={test.grade_config} gradingMethod={test.grading_method} />
+          )}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Normering sidebar card ─────────────────────────────────────────────────────
+
+const ROUTE_ORDER = ['oranje', 'geel', 'blauw']
+const GRADE_COLORS = { expert: '#2e7d32', beheerst: '#1a6ecc', in_ontwikkeling: '#c07000' }
+
+function NormeringCard({ gradeConfig, gradingMethod }) {
+  const unit = gradingMethod === 'points' ? '%' : ' LD'
+  const routes = ROUTE_ORDER.filter(r => gradeConfig[r])
+  return (
+    <div className="card" style={{ fontSize: 12, marginTop: 0 }}>
+      <div style={{ fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 8 }}>
+        Normering
+      </div>
+      {routes.map(route => {
+        const cfg = gradeConfig[route]
+        return (
+          <div key={route} style={{ marginBottom: 6 }}>
+            <div style={{ fontWeight: 600, textTransform: 'capitalize', color: '#444', marginBottom: 2 }}>{route}</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{ padding: '1px 6px', borderRadius: 3, background: '#e8f5e9', color: GRADE_COLORS.expert, fontWeight: 600 }}>
+                Expert ≥ {cfg.expert}{unit}
+              </span>
+              <span style={{ padding: '1px 6px', borderRadius: 3, background: '#e8f0fc', color: GRADE_COLORS.beheerst, fontWeight: 600 }}>
+                Beheerst ≥ {cfg.beheerst}{unit}
+              </span>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

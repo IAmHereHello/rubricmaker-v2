@@ -70,11 +70,13 @@ export default function SessionNew() {
             <tbody>
               {inProgress.map(sess => {
                 const state = sessionState(sess)
+                const notStarted = sess.student_count === 0
                 const progressLabel = state === 'review'
                   ? `Nakijken klaar – beoordelingsronde (${sess.review_count}/${sess.student_count})`
-                  : sess.total_count === 0
+                  : notStarted
                     ? 'Nog niet gestart'
                     : `${sess.graded_count} / ${sess.total_count} beoordeeld`
+                const progressColor = state === 'review' ? '#1a6ecc' : '#c07000'
                 const resumeUrl = state === 'review'
                   ? `/sessions/${sess.id}/review`
                   : `/sessions/${sess.id}/grade`
@@ -84,13 +86,13 @@ export default function SessionNew() {
                     <td>{sess.test_name}</td>
                     <td>{sess.class_name}</td>
                     <td>
-                      <span style={{ color: state === 'review' ? '#1a6ecc' : sess.total_count === 0 ? '#888' : '#c07000', fontSize: 13 }}>
+                      <span style={{ color: progressColor, fontSize: 13 }}>
                         {progressLabel}
                       </span>
                     </td>
                     <td>
                       <Link to={resumeUrl} className="btn btn-primary btn-sm">
-                        Hervat →
+                        {notStarted ? 'Starten →' : 'Hervat →'}
                       </Link>
                     </td>
                   </tr>
