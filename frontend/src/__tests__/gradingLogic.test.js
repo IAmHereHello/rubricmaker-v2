@@ -3,6 +3,9 @@ import {
   isApplicableForQuestion,
   shouldEnterQ1Mode,
   findResumePosition,
+  calcCijfer,
+  formatCijfer,
+  gradeLabel,
 } from '../utils/gradingLogic.js'
 
 const orangeQ1 = { id: 1, routes: ['oranje'], max_score: 10 }
@@ -52,5 +55,24 @@ describe('Q1 route-skip: orange Q1 with yellow student', () => {
     }
     const [qIdx] = findResumePosition(t, [yellowStudent], scoreMap)
     expect(qIdx).toBe(t.questions.length)
+  })
+})
+
+describe('cijfer grading', () => {
+  test('default formula punten/totaal * 9 + 1', () => {
+    expect(calcCijfer(0, 20, {})).toBe('1.0')
+    expect(calcCijfer(20, 20, null)).toBe('10.0')
+    expect(calcCijfer(15, 20, { cijfer: { multiplier: 9, offset: 1 } })).toBe('7.8')
+  })
+  test('custom formula', () => {
+    expect(calcCijfer(10, 20, { cijfer: { multiplier: 9.5, offset: 0.5 } })).toBe('5.3')
+  })
+  test('no points possible gives null', () => {
+    expect(calcCijfer(0, 0, {})).toBeNull()
+  })
+  test('formatting and labels', () => {
+    expect(formatCijfer('7.4')).toBe('7,4')
+    expect(gradeLabel('7.4')).toBe('7,4')
+    expect(gradeLabel('expert')).toBe('Expert')
   })
 })

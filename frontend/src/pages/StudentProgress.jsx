@@ -3,10 +3,10 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
 import RouteBadge from '../components/RouteBadge.jsx'
 import { PYRAMID_LEVELS, pyramidLabel } from '../constants.js'
+import { gradeLabel } from '../utils/gradingLogic.js'
 
 const LEVELS = PYRAMID_LEVELS.map(l => l.value)
 
-const GRADE_LABELS = { expert: 'Expert', beheerst: 'Beheerst', in_ontwikkeling: 'In Ontwikkeling' }
 const GRADE_COLORS = { expert: '#2e7d32', beheerst: '#1a6ecc', in_ontwikkeling: '#c07000' }
 const GRADE_BG    = { expert: '#e8f5e9', beheerst: '#e8f0fc', in_ontwikkeling: '#fff3e0' }
 
@@ -14,9 +14,9 @@ function GradeBadge({ grade }) {
   return (
     <span style={{
       display: 'inline-block', fontSize: 12, fontWeight: 600, borderRadius: 4,
-      padding: '2px 8px', color: GRADE_COLORS[grade], background: GRADE_BG[grade],
+      padding: '2px 8px', color: GRADE_COLORS[grade] ?? '#1a6ecc', background: GRADE_BG[grade] ?? '#e8f0fc',
     }}>
-      {GRADE_LABELS[grade] || grade}
+      {gradeLabel(grade)}
     </span>
   )
 }
@@ -150,11 +150,11 @@ export default function StudentProgress() {
                 {snap.grades.map((g, i) => (
                   <span key={i} style={{
                     fontSize: 12, padding: '2px 8px', borderRadius: 4,
-                    background: g.grade === 'expert' ? '#e8f5e9' : g.grade === 'beheerst' ? '#e8f0fc' : '#fff3e0',
-                    color: g.grade === 'expert' ? '#2e7d32' : g.grade === 'beheerst' ? '#1a6ecc' : '#c07000',
+                    background: g.grade === 'expert' ? '#e8f5e9' : g.grade === 'in_ontwikkeling' ? '#fff3e0' : '#e8f0fc',
+                    color: g.grade === 'expert' ? '#2e7d32' : g.grade === 'in_ontwikkeling' ? '#c07000' : '#1a6ecc',
                     fontWeight: 600,
                   }}>
-                    {g.test_name}: {g.grade === 'expert' ? 'Expert' : g.grade === 'beheerst' ? 'Beheerst' : 'In Ontwikkeling'}
+                    {g.test_name}: {gradeLabel(g.grade)}
                   </span>
                 ))}
               </div>

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import * as api from '../api.js'
 import { PYRAMID_LEVELS, pyramidLabel, DOMAINS } from '../constants.js'
+import { getCijferConfig } from '../utils/gradingLogic.js'
 
 const ROUTES_ALL = ['oranje', 'geel', 'blauw']
 const EMPTY_Q = { description: '', answer: '', max_score: 1, routes: ['oranje', 'geel', 'blauw'], domain: DOMAINS[0], pyramid_level: PYRAMID_LEVELS[0].value, learning_goal: '', learning_goal_threshold: '' }
@@ -19,6 +20,7 @@ export default function TestEdit() {
   // Grading config state
   const [gradingMethod, setGradingMethod] = useState(null)   // null | 'points' | 'goals'
   const [gradeConfig, setGradeConfig] = useState(EMPTY_CONFIG)
+  const [cijferForm, setCijferForm] = useState({ multiplier: '9', offset: '1' })
   const [gradingError, setGradingError] = useState('')
   const [gradingSaved, setGradingSaved] = useState(false)
 
@@ -29,7 +31,10 @@ export default function TestEdit() {
         setTestName(t.name)
         if (t.grading_method) {
           setGradingMethod(t.grading_method)
-          if (t.grade_config) {
+          if (t.grading_method === 'cijfer') {
+            const c = getCijferConfig(t.grade_config)
+            setCijferForm({ multiplier: String(c.multiplier), offset: String(c.offset) })
+          } else if (t.grade_config) {
             setGradeConfig({
               oranje: { beheerst: t.grade_config.oranje?.beheerst ?? '', expert: t.grade_config.oranje?.expert ?? '' },
               geel:   { beheerst: t.grade_config.geel?.beheerst   ?? '', expert: t.grade_config.geel?.expert   ?? '' },
@@ -120,7 +125,12 @@ export default function TestEdit() {
 
   async function saveGrading() {
     setGradingError('')
-    if (gradingMethod) {
+    if (gradingMethod === 'cijfer') {
+      const m = parseFloat(String(cijferForm.multiplier).replace(',', '.'))
+      const o = parseFloat(String(cijferForm.offset).replace(',', '.'))
+      if (isNaN(m) || isNaN(o)) { setGradingError('Vul beide waarden van de formule in.'); return }
+      if (m <= 0) { setGradingError('De vermenigvuldiger moet groter zijn dan 0.'); return }
+    } else if (gradingMethod) {
       for (const route of ROUTES_ALL) {
         const b = parseInt(gradeConfig[route].beheerst)
         const e = parseInt(gradeConfig[route].expert)
@@ -135,7 +145,17 @@ export default function TestEdit() {
       }
     }
 
-    const payload = gradingMethod
+    const payload = gradingMethod === 'cijfer'
+      ? {
+          grading_method: 'cijfer',
+          grade_config: {
+            cijfer: {
+              multiplier: parseFloat(String(cijferForm.multiplier).replace(',', '.')),
+              offset: parseFloat(String(cijferForm.offset).replace(',', '.')),
+            },
+          },
+        }
+      : gradingMethod
       ? {
           grading_method: gradingMethod,
           grade_config: {
@@ -364,6 +384,7 @@ export default function TestEdit() {
               { value: null, label: 'Geen beoordeling' },
               { value: 'points', label: 'Op basis van punten (%)' },
               { value: 'goals', label: 'Op basis van leerdoelen (aantal behaald)' },
+              { value: 'cijfer', label: 'Cijfer (1 - 10)' },
             ].map(opt => (
               <label key={String(opt.value)} style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 400, cursor: 'pointer' }}>
                 <input
@@ -378,7 +399,29 @@ export default function TestEdit() {
           </div>
         </div>
 
-        {gradingMethod && (
+        {gradingMethod === 'cijfer' && (
+          <div style={{ marginBottom: 16, fontSize: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span>Cijfer = punten / totaal ×</span>
+              <input
+                type="text" inputMode="decimal" value={cijferForm.multiplier}
+                onChange={e => setCijferForm(f => ({ ...f, multiplier: e.target.value }))}
+                style={{ width: 64 }}
+              />
+              <span>+</span>
+              <input
+                type="text" inputMode="decimal" value={cijferForm.offset}
+                onChange={e => setCijferForm(f => ({ ...f, offset: e.target.value }))}
+                style={{ width: 64 }}
+              />
+            </div>
+            <div className="text-muted" style={{ fontSize: 12, marginTop: 6 }}>
+              Standaard: × 9 + 1. Het cijfer wordt afgerond op 1 decimaal en kan per leerling handmatig worden aangepast.
+            </div>
+          </div>
+        )}
+
+        {gradingMethod && gradingMethod !== 'cijfer' && (
           <div style={{ marginBottom: 16 }}>
             <table style={{ borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>

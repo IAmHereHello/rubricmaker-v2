@@ -2,7 +2,9 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
 import RouteBadge from '../components/RouteBadge.jsx'
+import CijferInput from '../components/CijferInput.jsx'
 import { pyramidLabel } from '../constants.js'
+import { calcCijfer, formatCijferFormula, gradeLabel } from '../utils/gradingLogic.js'
 
 const GRADE_OPTIONS = [
   { value: 'expert',         label: 'Expert' },
@@ -16,10 +18,19 @@ const GRADE_BG    = { expert: '#e8f5e9', beheerst: '#e8f0fc', in_ontwikkeling: '
 
 function computeGrade(student, questions, scoreMap, gradingMethod, gradeConfig) {
   if (!gradingMethod || !gradeConfig) return null
+  const applicable = questions.filter(q => (q.routes || []).includes(student.route))
+
+  if (gradingMethod === 'cijfer') {
+    let scored = 0, maxPts = 0
+    for (const q of applicable) {
+      const sc = scoreMap[`${q.id}-${student.id}`]
+      if (sc && !sc.excluded && sc.points !== null) { scored += sc.points; maxPts += q.max_score }
+    }
+    return calcCijfer(scored, maxPts, gradeConfig)
+  }
+
   const routeCfg = gradeConfig[student.route]
   if (!routeCfg) return null
-
-  const applicable = questions.filter(q => (q.routes || []).includes(student.route))
 
   if (gradingMethod === 'points') {
     let scored = 0, maxPts = 0
@@ -182,6 +193,7 @@ export default function Review() {
   // ── Normering (grade thresholds) for the student's route ─────────────────
   const thresholdText = useMemo(() => {
     if (!student || !test?.grading_method || !test?.grade_config) return null
+    if (test.grading_method === 'cijfer') return `Cijfer = ${formatCijferFormula(test.grade_config)}`
     const cfg = test.grade_config[student.route]
     if (!cfg) return null
     if (test.grading_method === 'points') {
@@ -499,6 +511,9 @@ export default function Review() {
               </div>
             )}
 
+            {test.grading_method === 'cijfer' ? (
+              <CijferInput value={displayGrade} onChange={setLocalGrade} />
+            ) : (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
               {GRADE_OPTIONS.map(opt => {
                 const active = displayGrade === opt.value
@@ -519,10 +534,11 @@ export default function Review() {
                 )
               })}
             </div>
+            )}
 
             {isManual && computedGrade && displayGrade !== computedGrade && (
               <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
-                Automatisch: <strong>{GRADE_OPTIONS.find(o => o.value === computedGrade)?.label}</strong>
+                Automatisch: <strong>{gradeLabel(computedGrade)}</strong>
                 {' · '}
                 <button
                   onClick={() => setLocalGrade(computedGrade)}
@@ -568,9 +584,9 @@ export default function Review() {
                   {g?.review_done && (
                     <span style={{
                       fontSize: 11, fontWeight: 600, borderRadius: 3, padding: '1px 5px',
-                      background: GRADE_BG[g.grade], color: GRADE_COLORS[g.grade],
+                      background: GRADE_BG[g.grade] ?? '#e8f0fc', color: GRADE_COLORS[g.grade] ?? '#1a6ecc',
                     }}>
-                      {GRADE_OPTIONS.find(o => o.value === g.grade)?.label}
+                      {gradeLabel(g.grade)}
                     </span>
                   )}
                 </div>

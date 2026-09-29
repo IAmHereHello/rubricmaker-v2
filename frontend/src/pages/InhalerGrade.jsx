@@ -2,8 +2,9 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
 import RouteBadge from '../components/RouteBadge.jsx'
+import CijferInput from '../components/CijferInput.jsx'
 import { pyramidLabel } from '../constants.js'
-import { isApplicableForQuestion } from '../utils/gradingLogic.js'
+import { isApplicableForQuestion, calcCijfer, formatCijferFormula, gradeLabel } from '../utils/gradingLogic.js'
 
 const GRADE_OPTIONS = [
   { value: 'expert',          label: 'Expert' },
@@ -15,9 +16,17 @@ const GRADE_BG    = { expert: '#e8f5e9', beheerst: '#e8f0fc', in_ontwikkeling: '
 
 function computeGrade(student, questions, scoreMap, gradingMethod, gradeConfig) {
   if (!gradingMethod || !gradeConfig) return null
+  const applicable = questions.filter(q => (q.routes || []).includes(student.route))
+  if (gradingMethod === 'cijfer') {
+    let scored = 0, maxPts = 0
+    for (const q of applicable) {
+      const sc = scoreMap[`${q.id}-${student.id}`]
+      if (sc && !sc.excluded && sc.points !== null) { scored += sc.points; maxPts += q.max_score }
+    }
+    return calcCijfer(scored, maxPts, gradeConfig)
+  }
   const routeCfg = gradeConfig[student.route]
   if (!routeCfg) return null
-  const applicable = questions.filter(q => (q.routes || []).includes(student.route))
   if (gradingMethod === 'points') {
     let scored = 0, maxPts = 0
     for (const q of applicable) {
@@ -436,6 +445,9 @@ export default function InhalerGrade() {
             <div style={{ fontSize: 12, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 12 }}>
               Beoordeling
             </div>
+            {test.grading_method === 'cijfer' ? (
+              <CijferInput value={displayGrade} onChange={handleSetGrade} />
+            ) : (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
               {GRADE_OPTIONS.map(opt => {
                 const active = displayGrade === opt.value
@@ -456,9 +468,10 @@ export default function InhalerGrade() {
                 )
               })}
             </div>
+            )}
             {isManual && computedGrade && displayGrade !== computedGrade && (
               <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
-                Automatisch: <strong>{GRADE_OPTIONS.find(o => o.value === computedGrade)?.label}</strong>
+                Automatisch: <strong>{gradeLabel(computedGrade)}</strong>
                 {' · '}
                 <button
                   onClick={() => { setManualGrade(null); setIsManual(false) }}

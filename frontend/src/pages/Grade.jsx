@@ -8,6 +8,7 @@ import {
   getOrderedStudents,
   shouldEnterQ1Mode,
   findResumePosition,
+  formatCijferFormula,
 } from '../utils/gradingLogic.js'
 
 export default function Grade() {
@@ -879,6 +880,16 @@ const ROUTE_ORDER = ['oranje', 'geel', 'blauw']
 const GRADE_COLORS = { expert: '#2e7d32', beheerst: '#1a6ecc', in_ontwikkeling: '#c07000' }
 
 function NormeringCard({ gradeConfig, gradingMethod }) {
+  if (gradingMethod === 'cijfer') {
+    return (
+      <div className="card" style={{ fontSize: 12, marginTop: 0 }}>
+        <div style={{ fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 8 }}>
+          Normering
+        </div>
+        Cijfer = {formatCijferFormula(gradeConfig)}
+      </div>
+    )
+  }
   const unit = gradingMethod === 'points' ? '%' : ' LD'
   const routes = ROUTE_ORDER.filter(r => gradeConfig[r])
   return (
