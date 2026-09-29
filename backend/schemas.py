@@ -176,6 +176,7 @@ class StudentGradeUpsert(BaseModel):
     grade: str       # "beheerst" | "expert" | "in_ontwikkeling" | cijfer, e.g. "7.4"
     is_manual: bool = False
     review_done: bool = False
+    stars: int = 0
 
 class StudentGradeOut(BaseModel):
     id: int
@@ -184,4 +185,5 @@ class StudentGradeOut(BaseModel):
     grade: str
     is_manual: bool
     review_done: bool
+    stars: Optional[int] = 0
     model_config = {"from_attributes": True}

@@ -1,7 +1,7 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts'
 import RouteBadge from './RouteBadge.jsx'
 import { LEVEL_LABELS, ROUTE_COLORS } from '../constants.js'
-import { isCijferGrade, gradeLabel, formatCijferFormula } from '../utils/gradingLogic.js'
+import { STAR_VALUE, isCijferGrade, gradeLabel, formatCijferFormula } from '../utils/gradingLogic.js'
 
 const GRADE_STYLES = {
   expert: { background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d' },
@@ -120,6 +120,11 @@ export default function StudentRubric({ student, test, session, questions, score
               </span>
             )}
           </div>
+          {test.grading_method === 'cijfer' && grade?.stars > 0 && (
+            <div style={{ fontSize: 11, color: '#b45309', textAlign: 'right' }}>
+              {grade.stars} sterretje{grade.stars === 1 ? '' : 's'} (−{String(grade.stars * STAR_VALUE).replace('.', ',')})
+            </div>
+          )}
           {thresholdText && (
             <div style={{ fontSize: 10, color: '#9ca3af', textAlign: 'right' }}>{thresholdText}</div>
           )}

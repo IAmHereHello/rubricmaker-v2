@@ -3,8 +3,9 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
 import RouteBadge from '../components/RouteBadge.jsx'
 import CijferInput from '../components/CijferInput.jsx'
+import StarInput from '../components/StarInput.jsx'
 import { pyramidLabel } from '../constants.js'
-import { calcCijfer, formatCijferFormula, gradeLabel } from '../utils/gradingLogic.js'
+import { calcCijfer, shiftCijfer, formatCijferFormula, gradeLabel } from '../utils/gradingLogic.js'
 
 const GRADE_OPTIONS = [
   { value: 'expert',         label: 'Expert' },
@@ -16,7 +17,7 @@ const GRADE_BG    = { expert: '#e8f5e9', beheerst: '#e8f0fc', in_ontwikkeling: '
 
 // ── Grade computation ─────────────────────────────────────────────────────────
 
-function computeGrade(student, questions, scoreMap, gradingMethod, gradeConfig) {
+function computeGrade(student, questions, scoreMap, gradingMethod, gradeConfig, stars = 0) {
   if (!gradingMethod || !gradeConfig) return null
   const applicable = questions.filter(q => (q.routes || []).includes(student.route))
 
@@ -26,7 +27,7 @@ function computeGrade(student, questions, scoreMap, gradingMethod, gradeConfig) 
       const sc = scoreMap[`${q.id}-${student.id}`]
       if (sc && !sc.excluded && sc.points !== null) { scored += sc.points; maxPts += q.max_score }
     }
-    return calcCijfer(scored, maxPts, gradeConfig)
+    return calcCijfer(scored, maxPts, gradeConfig, stars)
   }
 
   const routeCfg = gradeConfig[student.route]
@@ -116,7 +117,7 @@ export default function Review() {
         setScoreMap(sm)
 
         const gm = {}
-        for (const g of grades) gm[g.student_id] = { grade: g.grade, is_manual: g.is_manual, review_done: g.review_done }
+        for (const g of grades) gm[g.student_id] = { grade: g.grade, is_manual: g.is_manual, review_done: g.review_done, stars: g.stars || 0 }
         setGradeMap(gm)
 
         const ordered = (sess.student_order || [])
@@ -154,13 +155,15 @@ export default function Review() {
   const student = students[sIdx]
 
   // ── Per-student computed grade ────────────────────────────────────────────
+  const localGrade = gradeMap[student?.id]
+  const stars = localGrade?.stars ?? 0
+
   const computedGrade = useMemo(() => {
     if (!student || !test) return null
-    return computeGrade(student, test.questions, scoreMap, test.grading_method, test.grade_config)
-  }, [student?.id, scoreMap, test])
+    return computeGrade(student, test.questions, scoreMap, test.grading_method, test.grade_config, stars)
+  }, [student?.id, scoreMap, test, stars])
 
   // Local grade override for the current student (session-level)
-  const localGrade = gradeMap[student?.id]
   const displayGrade = localGrade?.grade ?? computedGrade
 
   // Whether we've explicitly set a grade that differs from computed
@@ -232,8 +235,24 @@ export default function Review() {
     const auto = computedGrade
     setGradeMap(m => ({
       ...m,
-      [student.id]: { grade, is_manual: grade !== auto, review_done: false },
+      [student.id]: { ...m[student.id], grade, is_manual: grade !== auto, review_done: false },
     }))
+  }
+
+  function setStars(n) {
+    setGradeMap(m => {
+      const prev = m[student.id]
+      const wasManual = prev?.is_manual && prev?.grade
+      return {
+        ...m,
+        [student.id]: {
+          ...prev,
+          stars: n,
+          grade: wasManual ? shiftCijfer(prev.grade, n - (prev.stars ?? 0)) : undefined,
+          review_done: false,
+        },
+      }
+    })
   }
 
   async function startEditScore(q) {
@@ -308,8 +327,9 @@ export default function Review() {
         grade,
         is_manual: isManual,
         review_done: true,
+        stars: test.grading_method === 'cijfer' ? stars : 0,
       })
-      setGradeMap(m => ({ ...m, [student.id]: { grade, is_manual: isManual, review_done: true } }))
+      setGradeMap(m => ({ ...m, [student.id]: { grade, is_manual: isManual, review_done: true, stars } }))
       if (sIdx >= students.length - 1) {
         setDone(true)
       } else {
@@ -512,7 +532,10 @@ export default function Review() {
             )}
 
             {test.grading_method === 'cijfer' ? (
-              <CijferInput value={displayGrade} onChange={setLocalGrade} />
+              <>
+                <StarInput value={stars} onChange={setStars} />
+                <CijferInput value={displayGrade} onChange={setLocalGrade} />
+              </>
             ) : (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
               {GRADE_OPTIONS.map(opt => {

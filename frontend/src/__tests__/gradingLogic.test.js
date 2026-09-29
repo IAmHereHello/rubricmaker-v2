@@ -4,6 +4,7 @@ import {
   shouldEnterQ1Mode,
   findResumePosition,
   calcCijfer,
+  shiftCijfer,
   formatCijfer,
   gradeLabel,
 } from '../utils/gradingLogic.js'
@@ -66,6 +67,13 @@ describe('cijfer grading', () => {
   })
   test('custom formula', () => {
     expect(calcCijfer(10, 20, { cijfer: { multiplier: 9.5, offset: 0.5 } })).toBe('5.3')
+  })
+  test('sterretjes: half a point off each, never below 1', () => {
+    expect(calcCijfer(20, 20, {}, 2)).toBe('9.0')
+    expect(calcCijfer(15, 20, {}, 1)).toBe('7.3')
+    expect(calcCijfer(0, 20, {}, 3)).toBe('1.0')
+    expect(shiftCijfer('8.0', 2)).toBe('7.0')
+    expect(shiftCijfer('8.0', -1)).toBe('8.5')
   })
   test('no points possible gives null', () => {
     expect(calcCijfer(0, 0, {})).toBeNull()

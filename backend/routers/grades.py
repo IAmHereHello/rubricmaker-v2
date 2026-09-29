@@ -30,6 +30,7 @@ def upsert_student_grade(
         existing.grade = body.grade
         existing.is_manual = body.is_manual
         existing.review_done = body.review_done
+        existing.stars = body.stars
         db.commit()
         db.refresh(existing)
         return existing
@@ -40,6 +41,7 @@ def upsert_student_grade(
         grade=body.grade,
         is_manual=body.is_manual,
         review_done=body.review_done,
+        stars=body.stars,
     )
     db.add(obj)
     db.commit()
