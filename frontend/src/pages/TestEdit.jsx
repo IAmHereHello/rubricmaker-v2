@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import * as api from '../api.js'
 import { PYRAMID_LEVELS, pyramidLabel, DOMAINS } from '../constants.js'
+import { CIJFER_FORMULA } from '../utils/cijfer.js'
 
 const ROUTES_ALL = ['oranje', 'geel', 'blauw']
 const EMPTY_Q = { description: '', answer: '', max_score: 1, routes: ['oranje', 'geel', 'blauw'], domain: DOMAINS[0], pyramid_level: PYRAMID_LEVELS[0].value, learning_goal: '', learning_goal_threshold: '' }
@@ -17,10 +18,12 @@ export default function TestEdit() {
   const [error, setError] = useState('')
 
   // Grading config state
-  const [gradingMethod, setGradingMethod] = useState(null)   // null | 'points' | 'goals'
+  const [gradingMethod, setGradingMethod] = useState(null)   // null | 'points' | 'goals' | 'cijfer'
   const [gradeConfig, setGradeConfig] = useState(EMPTY_CONFIG)
   const [gradingError, setGradingError] = useState('')
   const [gradingSaved, setGradingSaved] = useState(false)
+  // 'cijfer' has a fixed formula, so only points/goals need per-route thresholds
+  const usesThresholds = gradingMethod === 'points' || gradingMethod === 'goals'
 
   useEffect(() => {
     api.getTest(id)
@@ -120,7 +123,7 @@ export default function TestEdit() {
 
   async function saveGrading() {
     setGradingError('')
-    if (gradingMethod) {
+    if (usesThresholds) {
       for (const route of ROUTES_ALL) {
         const b = parseInt(gradeConfig[route].beheerst)
         const e = parseInt(gradeConfig[route].expert)
@@ -135,7 +138,7 @@ export default function TestEdit() {
       }
     }
 
-    const payload = gradingMethod
+    const payload = usesThresholds
       ? {
           grading_method: gradingMethod,
           grade_config: {
@@ -144,7 +147,7 @@ export default function TestEdit() {
             blauw:  { beheerst: parseInt(gradeConfig.blauw.beheerst),  expert: parseInt(gradeConfig.blauw.expert) },
           },
         }
-      : { grading_method: null, grade_config: null }
+      : { grading_method: gradingMethod, grade_config: null }
 
     try {
       const updated = await api.updateTest(id, payload)
@@ -169,6 +172,10 @@ export default function TestEdit() {
   if (!test) return <div className="page"><p>Laden...</p></div>
 
   const levelClass = (l) => `level-pill level-${l}`
+
+  // Total points a student on this route can score: only questions that apply to the route count
+  const routeTotal = (route) =>
+    test.questions.filter(q => (q.routes || []).includes(route)).reduce((sum, q) => sum + q.max_score, 0)
 
   return (
     <div className="page">
@@ -364,6 +371,7 @@ export default function TestEdit() {
               { value: null, label: 'Geen beoordeling' },
               { value: 'points', label: 'Op basis van punten (%)' },
               { value: 'goals', label: 'Op basis van leerdoelen (aantal behaald)' },
+              { value: 'cijfer', label: `Cijfer (${CIJFER_FORMULA})` },
             ].map(opt => (
               <label key={String(opt.value)} style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 400, cursor: 'pointer' }}>
                 <input
@@ -378,7 +386,25 @@ export default function TestEdit() {
           </div>
         </div>
 
-        {gradingMethod && (
+        {gradingMethod === 'cijfer' && (
+          <div style={{ marginBottom: 16, padding: '12px 14px', background: '#f5f7fb', borderRadius: 6, fontSize: 13, color: '#444', lineHeight: 1.5 }}>
+            <div>
+              Het cijfer wordt per leerling berekend als <strong>{CIJFER_FORMULA}</strong>, afgerond op één decimaal.
+              0 punten geeft een 1,0, de helft van de punten een 5,5 en alle punten een 10,0.
+            </div>
+            <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span>Alleen vragen die voor de route van de leerling gelden tellen mee. Totaal aantal punten:</span>
+              {ROUTES_ALL.map(route => (
+                <span key={route} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <span className={`badge badge-${route}`}>{route}</span>
+                  <strong>{routeTotal(route)}</strong>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {usesThresholds && (
           <div style={{ marginBottom: 16 }}>
             <table style={{ borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>

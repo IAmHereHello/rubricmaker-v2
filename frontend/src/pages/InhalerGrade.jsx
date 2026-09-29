@@ -2,8 +2,10 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
 import RouteBadge from '../components/RouteBadge.jsx'
+import CijferInput from '../components/CijferInput.jsx'
 import { pyramidLabel } from '../constants.js'
 import { isApplicableForQuestion } from '../utils/gradingLogic.js'
+import { computeCijferGrade, CIJFER_FORMULA } from '../utils/cijfer.js'
 
 const GRADE_OPTIONS = [
   { value: 'expert',          label: 'Expert' },
@@ -14,6 +16,7 @@ const GRADE_COLORS = { expert: '#2e7d32', beheerst: '#1a6ecc', in_ontwikkeling: 
 const GRADE_BG    = { expert: '#e8f5e9', beheerst: '#e8f0fc', in_ontwikkeling: '#fff3e0' }
 
 function computeGrade(student, questions, scoreMap, gradingMethod, gradeConfig) {
+  if (gradingMethod === 'cijfer') return computeCijferGrade(student, questions, scoreMap)
   if (!gradingMethod || !gradeConfig) return null
   const routeCfg = gradeConfig[student.route]
   if (!routeCfg) return null
@@ -69,6 +72,7 @@ export default function InhalerGrade() {
   const [manualGrade, setManualGrade] = useState(null)
   const [isManual, setIsManual]       = useState(false)
   const [reviewSaving, setReviewSaving] = useState(false)
+  const [cijferInvalid, setCijferInvalid] = useState(false)  // cijfer field holds something that is not a cijfer
   const [editKey, setEditKey] = useState(null)
   const [editVal, setEditVal] = useState('')
 
@@ -436,27 +440,42 @@ export default function InhalerGrade() {
             <div style={{ fontSize: 12, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 12 }}>
               Beoordeling
             </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-              {GRADE_OPTIONS.map(opt => {
-                const active = displayGrade === opt.value
-                return (
-                  <button
-                    key={opt.value}
-                    onClick={() => handleSetGrade(opt.value)}
-                    style={{
-                      padding: '8px 18px', borderRadius: 6, fontWeight: 600, fontSize: 14, cursor: 'pointer',
-                      border: active ? `2px solid ${GRADE_COLORS[opt.value]}` : '2px solid #dde',
-                      background: active ? GRADE_BG[opt.value] : '#fff',
-                      color: active ? GRADE_COLORS[opt.value] : '#555',
-                      transition: 'all .15s',
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                )
-              })}
-            </div>
-            {isManual && computedGrade && displayGrade !== computedGrade && (
+            {test.grading_method === 'cijfer' ? (
+              <>
+                <div className="text-muted" style={{ fontSize: 12, marginBottom: 12 }}>
+                  Normering: cijfer = {CIJFER_FORMULA}
+                </div>
+                <CijferInput
+                  value={displayGrade}
+                  autoValue={computedGrade}
+                  onChange={handleSetGrade}
+                  onRestore={() => { setManualGrade(null); setIsManual(false) }}
+                  onInvalidChange={setCijferInvalid}
+                />
+              </>
+            ) : (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                {GRADE_OPTIONS.map(opt => {
+                  const active = displayGrade === opt.value
+                  return (
+                    <button
+                      key={opt.value}
+                      onClick={() => handleSetGrade(opt.value)}
+                      style={{
+                        padding: '8px 18px', borderRadius: 6, fontWeight: 600, fontSize: 14, cursor: 'pointer',
+                        border: active ? `2px solid ${GRADE_COLORS[opt.value]}` : '2px solid #dde',
+                        background: active ? GRADE_BG[opt.value] : '#fff',
+                        color: active ? GRADE_COLORS[opt.value] : '#555',
+                        transition: 'all .15s',
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            {test.grading_method !== 'cijfer' && isManual && computedGrade && displayGrade !== computedGrade && (
               <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
                 Automatisch: <strong>{GRADE_OPTIONS.find(o => o.value === computedGrade)?.label}</strong>
                 {' · '}
@@ -468,13 +487,13 @@ export default function InhalerGrade() {
                 </button>
               </div>
             )}
-            {!computedGrade && !displayGrade && (
+            {test.grading_method !== 'cijfer' && !computedGrade && !displayGrade && (
               <p className="text-muted" style={{ fontSize: 13 }}>Geen automatische beoordeling mogelijk. Kies handmatig.</p>
             )}
           </div>
 
           <div className="grade-nav-buttons" style={{ marginTop: 16 }}>
-            <button className="btn btn-primary" onClick={handleReviewConfirm} disabled={reviewSaving || !displayGrade}>
+            <button className="btn btn-primary" onClick={handleReviewConfirm} disabled={reviewSaving || !displayGrade || cijferInvalid}>
               {reviewSaving ? 'Opslaan…' : 'Bevestigen ✓'}
             </button>
           </div>

@@ -2,7 +2,9 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
 import RouteBadge from '../components/RouteBadge.jsx'
+import CijferInput from '../components/CijferInput.jsx'
 import { pyramidLabel } from '../constants.js'
+import { computeCijferGrade, isCijfer, formatCijfer, CIJFER_COLORS, CIJFER_FORMULA } from '../utils/cijfer.js'
 
 const GRADE_OPTIONS = [
   { value: 'expert',         label: 'Expert' },
@@ -12,9 +14,14 @@ const GRADE_OPTIONS = [
 const GRADE_COLORS = { expert: '#2e7d32', beheerst: '#1a6ecc', in_ontwikkeling: '#c07000' }
 const GRADE_BG    = { expert: '#e8f5e9', beheerst: '#e8f0fc', in_ontwikkeling: '#fff3e0' }
 
+// Text for a stored grade: a cijfer ("7,3") or the label of a beheerst/expert/in ontwikkeling grade
+const gradeName = (grade) =>
+  isCijfer(grade) ? formatCijfer(grade) : GRADE_OPTIONS.find(o => o.value === grade)?.label
+
 // ── Grade computation ─────────────────────────────────────────────────────────
 
 function computeGrade(student, questions, scoreMap, gradingMethod, gradeConfig) {
+  if (gradingMethod === 'cijfer') return computeCijferGrade(student, questions, scoreMap)
   if (!gradingMethod || !gradeConfig) return null
   const routeCfg = gradeConfig[student.route]
   if (!routeCfg) return null
@@ -75,6 +82,7 @@ export default function Review() {
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState('')
   const [done, setDone]         = useState(false)
+  const [cijferInvalid, setCijferInvalid] = useState(false)  // cijfer field holds something that is not a cijfer
 
   // Inline score editing
   const [editKey, setEditKey]   = useState(null)   // `${q.id}-${s.id}` or null
@@ -498,31 +506,47 @@ export default function Review() {
                 Normering ({student.route}): {thresholdText}
               </div>
             )}
+            {test.grading_method === 'cijfer' && (
+              <div className="text-muted" style={{ fontSize: 12, marginBottom: 12 }}>
+                Normering: cijfer = {CIJFER_FORMULA}
+              </div>
+            )}
 
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-              {GRADE_OPTIONS.map(opt => {
-                const active = displayGrade === opt.value
-                return (
-                  <button
-                    key={opt.value}
-                    onClick={() => setLocalGrade(opt.value)}
-                    style={{
-                      padding: '8px 18px', borderRadius: 6, fontWeight: 600, fontSize: 14, cursor: 'pointer',
-                      border: active ? `2px solid ${GRADE_COLORS[opt.value]}` : '2px solid #dde',
-                      background: active ? GRADE_BG[opt.value] : '#fff',
-                      color: active ? GRADE_COLORS[opt.value] : '#555',
-                      transition: 'all .15s',
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                )
-              })}
-            </div>
+            {test.grading_method === 'cijfer' ? (
+              <CijferInput
+                key={student.id}
+                value={displayGrade}
+                autoValue={computedGrade}
+                onChange={setLocalGrade}
+                onRestore={() => setLocalGrade(computedGrade)}
+                onInvalidChange={setCijferInvalid}
+              />
+            ) : (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                {GRADE_OPTIONS.map(opt => {
+                  const active = displayGrade === opt.value
+                  return (
+                    <button
+                      key={opt.value}
+                      onClick={() => setLocalGrade(opt.value)}
+                      style={{
+                        padding: '8px 18px', borderRadius: 6, fontWeight: 600, fontSize: 14, cursor: 'pointer',
+                        border: active ? `2px solid ${GRADE_COLORS[opt.value]}` : '2px solid #dde',
+                        background: active ? GRADE_BG[opt.value] : '#fff',
+                        color: active ? GRADE_COLORS[opt.value] : '#555',
+                        transition: 'all .15s',
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
 
-            {isManual && computedGrade && displayGrade !== computedGrade && (
+            {test.grading_method !== 'cijfer' && isManual && computedGrade && displayGrade !== computedGrade && (
               <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
-                Automatisch: <strong>{GRADE_OPTIONS.find(o => o.value === computedGrade)?.label}</strong>
+                Automatisch: <strong>{gradeName(computedGrade)}</strong>
                 {' · '}
                 <button
                   onClick={() => setLocalGrade(computedGrade)}
@@ -532,7 +556,7 @@ export default function Review() {
                 </button>
               </div>
             )}
-            {!computedGrade && !displayGrade && (
+            {test.grading_method !== 'cijfer' && !computedGrade && !displayGrade && (
               <p className="text-muted" style={{ fontSize: 13 }}>Geen automatische beoordeling mogelijk. Kies handmatig.</p>
             )}
           </div>
@@ -542,7 +566,7 @@ export default function Review() {
             <button className="btn btn-secondary" onClick={handlePrev} disabled={sIdx === 0}>
               ← Vorige
             </button>
-            <button className="btn btn-primary" onClick={handleConfirm} disabled={saving || !displayGrade || !!editKey}>
+            <button className="btn btn-primary" onClick={handleConfirm} disabled={saving || !displayGrade || !!editKey || cijferInvalid}>
               {saving ? 'Opslaan…' : sIdx === students.length - 1 ? 'Afronden ✓' : 'Bevestigen →'}
             </button>
           </div>
@@ -568,9 +592,10 @@ export default function Review() {
                   {g?.review_done && (
                     <span style={{
                       fontSize: 11, fontWeight: 600, borderRadius: 3, padding: '1px 5px',
-                      background: GRADE_BG[g.grade], color: GRADE_COLORS[g.grade],
+                      background: isCijfer(g.grade) ? CIJFER_COLORS.background : GRADE_BG[g.grade],
+                      color: isCijfer(g.grade) ? CIJFER_COLORS.color : GRADE_COLORS[g.grade],
                     }}>
-                      {GRADE_OPTIONS.find(o => o.value === g.grade)?.label}
+                      {gradeName(g.grade)}
                     </span>
                   )}
                 </div>

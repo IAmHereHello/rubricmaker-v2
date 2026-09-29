@@ -9,6 +9,7 @@ import {
   shouldEnterQ1Mode,
   findResumePosition,
 } from '../utils/gradingLogic.js'
+import { CIJFER_FORMULA } from '../utils/cijfer.js'
 
 export default function Grade() {
   const { id } = useParams()
@@ -676,7 +677,7 @@ export default function Grade() {
                 </div>
               ))}
             </div>
-            {test.grading_method && test.grade_config && (
+            {test.grading_method && (
               <NormeringCard gradeConfig={test.grade_config} gradingMethod={test.grading_method} />
             )}
           </div>
@@ -864,7 +865,7 @@ export default function Grade() {
               )
             })}
           </div>
-          {test.grading_method && test.grade_config && (
+          {test.grading_method && (
             <NormeringCard gradeConfig={test.grade_config} gradingMethod={test.grading_method} />
           )}
         </div>
@@ -879,6 +880,17 @@ const ROUTE_ORDER = ['oranje', 'geel', 'blauw']
 const GRADE_COLORS = { expert: '#2e7d32', beheerst: '#1a6ecc', in_ontwikkeling: '#c07000' }
 
 function NormeringCard({ gradeConfig, gradingMethod }) {
+  if (gradingMethod === 'cijfer') {
+    return (
+      <div className="card" style={{ fontSize: 12, marginTop: 0 }}>
+        <div style={{ fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 8 }}>
+          Normering
+        </div>
+        <div style={{ color: '#444' }}>Cijfer = {CIJFER_FORMULA}</div>
+      </div>
+    )
+  }
+  if (!gradeConfig) return null
   const unit = gradingMethod === 'points' ? '%' : ' LD'
   const routes = ROUTE_ORDER.filter(r => gradeConfig[r])
   return (

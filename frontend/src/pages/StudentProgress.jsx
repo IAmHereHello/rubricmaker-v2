@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
 import RouteBadge from '../components/RouteBadge.jsx'
 import { PYRAMID_LEVELS, pyramidLabel } from '../constants.js'
+import { isCijfer, formatCijfer, CIJFER_COLORS } from '../utils/cijfer.js'
 
 const LEVELS = PYRAMID_LEVELS.map(l => l.value)
 
@@ -10,13 +11,18 @@ const GRADE_LABELS = { expert: 'Expert', beheerst: 'Beheerst', in_ontwikkeling: 
 const GRADE_COLORS = { expert: '#2e7d32', beheerst: '#1a6ecc', in_ontwikkeling: '#c07000' }
 const GRADE_BG    = { expert: '#e8f5e9', beheerst: '#e8f0fc', in_ontwikkeling: '#fff3e0' }
 
+// A stored grade is either a label (beheerst/expert/in ontwikkeling) or a cijfer ("7.3")
+const gradeText = (grade) => isCijfer(grade) ? formatCijfer(grade) : GRADE_LABELS[grade] || grade
+const gradeColors = (grade) =>
+  isCijfer(grade) ? CIJFER_COLORS : { color: GRADE_COLORS[grade], background: GRADE_BG[grade] }
+
 function GradeBadge({ grade }) {
   return (
     <span style={{
       display: 'inline-block', fontSize: 12, fontWeight: 600, borderRadius: 4,
-      padding: '2px 8px', color: GRADE_COLORS[grade], background: GRADE_BG[grade],
+      padding: '2px 8px', ...gradeColors(grade),
     }}>
-      {GRADE_LABELS[grade] || grade}
+      {gradeText(grade)}
     </span>
   )
 }
@@ -150,11 +156,9 @@ export default function StudentProgress() {
                 {snap.grades.map((g, i) => (
                   <span key={i} style={{
                     fontSize: 12, padding: '2px 8px', borderRadius: 4,
-                    background: g.grade === 'expert' ? '#e8f5e9' : g.grade === 'beheerst' ? '#e8f0fc' : '#fff3e0',
-                    color: g.grade === 'expert' ? '#2e7d32' : g.grade === 'beheerst' ? '#1a6ecc' : '#c07000',
-                    fontWeight: 600,
+                    fontWeight: 600, ...gradeColors(g.grade),
                   }}>
-                    {g.test_name}: {g.grade === 'expert' ? 'Expert' : g.grade === 'beheerst' ? 'Beheerst' : 'In Ontwikkeling'}
+                    {g.test_name}: {gradeText(g.grade)}
                   </span>
                 ))}
               </div>

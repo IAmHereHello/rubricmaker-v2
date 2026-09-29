@@ -23,8 +23,8 @@ class Test(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     created_at = Column(DateTime, server_default=func.now())
-    grading_method = Column(String, nullable=True)   # "points" | "goals" | null
-    grade_config = Column(JSON, nullable=True)        # {oranje:{beheerst:N,expert:N}, geel:{...}, blauw:{...}}
+    grading_method = Column(String, nullable=True)   # "points" | "goals" | "cijfer" | null
+    grade_config = Column(JSON, nullable=True)        # {oranje:{beheerst:N,expert:N}, geel:{...}, blauw:{...}}; null for "cijfer" (fixed formula)
 
     questions = relationship(
         "Question", back_populates="test", cascade="all, delete-orphan",
@@ -89,7 +89,7 @@ class StudentGrade(Base):
     id = Column(Integer, primary_key=True, index=True)
     session_id = Column(Integer, ForeignKey("sessions.id"), nullable=False)
     student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
-    grade = Column(String, nullable=False)   # "beheerst" | "expert" | "in_ontwikkeling"
+    grade = Column(String, nullable=False)   # "beheerst" | "expert" | "in_ontwikkeling", or a cijfer as a one-decimal string ("7.3") for "cijfer" tests
     is_manual = Column(Boolean, default=False)
     review_done = Column(Boolean, default=False)
 

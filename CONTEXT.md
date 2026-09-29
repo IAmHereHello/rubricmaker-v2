@@ -56,10 +56,11 @@ Relationships: has many `Score` (cascade delete).
 id              Integer   PK
 name            String    not null
 created_at      DateTime  server default now()
-grading_method  String    nullable  — "points" | "goals" | null (no grading configured)
+grading_method  String    nullable  — "points" | "goals" | "cijfer" | null (no grading configured)
 grade_config    JSON      nullable  — per-route thresholds: {oranje:{beheerst:N,expert:N}, geel:{...}, blauw:{...}}
                                       For "points": N is a percentage (0–100).
                                       For "goals": N is an absolute count of learning goals.
+                                      Null for "cijfer": the formula is fixed, there is nothing to configure.
 ```
 Relationships: has many `Question` (ordered by `Question.order`, cascade delete), has many `Session` (cascade delete).
 
@@ -112,12 +113,14 @@ Relationships: belongs to `Session`, `Student`, and `Question`.
 id           Integer  PK
 session_id   Integer  FK → sessions.id  (cascade delete)
 student_id   Integer  FK → students.id  (cascade delete)
-grade        String   not null  — "beheerst" | "expert" | "in_ontwikkeling"
+grade        String   not null  — "beheerst" | "expert" | "in_ontwikkeling", or a cijfer as a one-decimal
+                                  dot-decimal string ("7.3") when the test's grading_method is "cijfer"
 is_manual    Boolean  default False  — True when teacher overrode the computed grade
 review_done  Boolean  default False  — True when teacher confirmed this student in the review round
 ```
 Only created when a test has `grading_method` set. One record per (session, student).
 A grade is only shown on the student progress page once `review_done = True`.
+`grade` is a plain text column, so storing a cijfer next to the label grades needed no schema change. Use `isCijfer(grade)` (`frontend/src/utils/cijfer.js`) to tell the two kinds apart; never assume `grade` is one of the three labels.
 
 **Constraint:** there is no unique index on `(session_id, student_id, question_id)` in the model, but the `PUT /scores` endpoint implements upsert logic manually (query first, update if found, insert otherwise).
 
@@ -232,24 +235,25 @@ Source: `frontend/src/App.jsx`. Router is `BrowserRouter`. All API calls go thro
 |---|---|---|
 | `Students.jsx` | `/students` | List students grouped by class; inline add/edit form; bulk import (textarea, 1 name per line, with interactive name-disambiguation on conflict); per-class delete with time+keyword confirmation; links to class overview and student progress |
 | `TestList.jsx` | `/tests` | List tests with create-and-redirect form |
-| `TestEdit.jsx` | `/tests/:id/edit` | Add/edit/delete/reorder questions for a test; rename test via pencil; domain and pyramid level are fixed `<select>` dropdowns; optional "Leerdoel" text input (with datalist autocomplete from other goal names in the test) + "Drempel" number input; both must be set together or both left empty |
+| `TestEdit.jsx` | `/tests/:id/edit` | Add/edit/delete/reorder questions for a test; rename test via pencil; domain and pyramid level are fixed `<select>` dropdowns; optional "Leerdoel" text input (with datalist autocomplete from other goal names in the test) + "Drempel" number input; both must be set together or both left empty. The "Beoordeling" card at the bottom picks the grading method (none / punten % / leerdoelen / cijfer); punten and leerdoelen show a per-route thresholds table, cijfer shows the formula plus the total points per route instead (no thresholds, saved as `grade_config: null`) |
 | `SessionNew.jsx` | `/sessions/new` | Shows in-progress sessions ("Lopende sessies") at the top with resume links; below that, the form to start a new session (pick test and class) |
 | `Grade.jsx` | `/sessions/:id/grade` | Main grading view (see Section 6 for flow details) |
 | `StudentProgress.jsx` | `/students/:id/progress` | Domain × pyramid heatmap + per-session score table for one student; "Rapport & Radar" button links to `/students/:id/report`; session rows are clickable and navigate to the session report with the student pre-selected (`?student=`) |
 | `ClassOverview.jsx` | `/classes/:class_name/overview` | Route-filtered class heatmap; route selector buttons at top; "Radardiagram" button links to `/classes/:class_name/radar` |
-| `Review.jsx` | `/sessions/:id/review` | Post-grading review round: for each student (in `student_order` order), shows score table with inline-editable scores, auto-computed grade (or manual override), and confirmation step. Advances to next student on "Bevestigen →". When all done, shows summary. |
+| `Review.jsx` | `/sessions/:id/review` | Post-grading review round: for each student (in `student_order` order), shows score table with inline-editable scores, auto-computed grade (or manual override), and confirmation step. Advances to next student on "Bevestigen →". When all done, shows summary. For a cijfer test the three grade buttons are replaced by `CijferInput` (auto cijfer, editable). |
 | `ReportHome.jsx` | `/reports` | Lists all sessions (newest first) with test name, class, date, and link to each session report |
 | `SessionReport.jsx` | `/reports/session/:id` | Per-session report with "Per leerling" tab (student dropdown + per-question score table) and "Klassenoverzicht" tab (question × student matrix); excluded questions shown as "n.v.t."; PDF export; pre-selects a student from `?student=` query param; shows learning goal achievement (see Section 6) |
 | `StudentReport.jsx` | `/students/:id/report` | Two tabs: "Voortgang over tijd" (line charts per domain / per pyramid level across sessions) and "Radardiagram" (domain radar + level radar with multi-student overlay selector); PDF export; session rows in the timeline table are clickable and navigate to the session report with the student pre-selected |
 | `ClassRadar.jsx` | `/classes/:class_name/radar` | Domain radar + level radar, one line per route (oranje/geel/blauw) using `ROUTE_COLORS`; PDF export |
 | `Inhalers.jsx` | `/inhalers` | Retake overview: lists sessions that have absent students (in class but not in `student_order`, not dismissed, route has ≥1 applicable question). Per student: "Nakijken →" link and "Verwijderen" button to add to `dismissed_inhalers`. |
-| `InhalerGrade.jsx` | `/sessions/:id/inhaler/:studentId` | Single-student retake grading. Skips Q1 mode; student is known upfront. Questions presented one at a time; non-applicable questions auto-get excluded scores. On completion, if `grading_method` is set shows inline review (score table + grade buttons). After confirm (or directly if no review), student is appended to `student_order` and the page redirects to `/inhalers`. Supports resume: resumes at first applicable question without a score. |
+| `InhalerGrade.jsx` | `/sessions/:id/inhaler/:studentId` | Single-student retake grading. Skips Q1 mode; student is known upfront. Questions presented one at a time; non-applicable questions auto-get excluded scores. On completion, if `grading_method` is set shows inline review (score table + grade buttons, or `CijferInput` for a cijfer test). After confirm (or directly if no review), student is appended to `student_order` and the page redirects to `/inhalers`. Supports resume: resumes at first applicable question without a score. |
 
 `/` redirects to `/students`.
 
 ### Shared Components
 
 - `components/RouteBadge.jsx` — renders a coloured badge (`badge-oranje`, `badge-geel`, `badge-blauw`) for a route string.
+- `components/CijferInput.jsx` — the cijfer control of the review round, shared by `Review.jsx` and `InhalerGrade.jsx`. Props: `value` (stored cijfer or falsy), `autoValue` (calculated cijfer), `onChange`, `onRestore`, `onInvalidChange`. Typing is buffered and committed on blur/Enter (Esc reverts); invalid text stays in the field, is flagged, and the parent disables "Bevestigen" through `onInvalidChange`. See Section 7 before changing its layout.
 
 ### Shared Constants
 
@@ -262,6 +266,7 @@ Source: `frontend/src/App.jsx`. Router is `BrowserRouter`. All API calls go thro
   - `ROUTE_COLORS` — `{ oranje: '#e07820', geel: '#a08b00', blauw: '#1a6ecc' }`, consistent colours for recharts lines.
   - `STUDENT_COLORS` — array of 7 distinct colours for multi-student radar overlays.
 - `utils/exportPDF.js` — `exportPDF(element, filename)` captures a DOM element with `html2canvas` (scale 2) and writes it to a multi-page A4 PDF using `jspdf`.
+- `utils/cijfer.js` — everything about the cijfer (1–10 grade), pure functions covered by `__tests__/cijfer.test.js`: `calcCijfer(scored, max)`, `computeCijferGrade(student, questions, scoreMap)`, `toStoredCijfer` / `parseCijfer` / `formatCijfer` / `isCijfer`, plus `CIJFER_FORMULA` and `CIJFER_COLORS`. See "Cijfer" in Section 6.
 
 ### Styling
 
@@ -326,8 +331,9 @@ Configured per test in `TestEdit.jsx` (new "Beoordeling" section at the bottom).
 **Methods:**
 - `"points"` — grade based on percentage of total applicable points scored.
 - `"goals"` — grade based on the count of named learning goals achieved.
+- `"cijfer"` — a numeric 1–10 grade instead of a label grade, see "Cijfer (1–10)" below. It has no thresholds.
 
-**Per-route thresholds:** `grade_config[route].beheerst` and `grade_config[route].expert`. For "points", values are percentages; for "goals", values are absolute counts. The `beheerst` threshold must be lower than `expert`.
+**Per-route thresholds** (points and goals only): `grade_config[route].beheerst` and `grade_config[route].expert`. For "points", values are percentages; for "goals", values are absolute counts. The `beheerst` threshold must be lower than `expert`.
 
 **Grade computation (frontend, `computeGrade()` in `Review.jsx`):**
 - Points: `pct = scored / max * 100`. If `pct >= expert` → "expert"; if `pct >= beheerst` → "beheerst"; else → "in_ontwikkeling".
@@ -340,6 +346,22 @@ When all questions are graded AND `test.grading_method` is set, `Grade.jsx` redi
 **Grade display:**
 - `StudentProgress.jsx` session table: shows a coloured badge (Expert = green, Beheerst = blue, In Ontwikkeling = orange) once `review_done = True`.
 - `GET /progress/student/{id}` includes `grade` per session (null if not yet reviewed).
+- A stored grade is either one of the three labels or a cijfer, whatever the test's current method is (the method can be changed after sessions were graded). Historical snapshot chips (`grades` in `StudentYearSnapshot`) hold the same kind of strings. Always render with `isCijfer()`; a label-only lookup would show every cijfer as "In Ontwikkeling".
+
+### Cijfer (1–10)
+
+A test can be graded with a numeric cijfer instead of Beheerst/Expert/In Ontwikkeling: pick "Cijfer" as grading method in the "Beoordeling" card of `TestEdit.jsx`. The formula is fixed:
+
+```
+cijfer = behaalde punten / totaal punten × 9 + 1      (0 points = 1,0 · half = 5,5 · all points = 10,0)
+```
+
+- **Points counted:** same rule as the "points" method. Only questions that apply to the student's route count; excluded and ungraded scores are ignored (an ungraded question is not a zero). No graded points at all → no automatic cijfer.
+- **Rounding:** half up to one decimal, done in integer tenths (`calcCijfer`). A plain `scored / max * 9 + 1` rounds exact halves the wrong way through floating-point error (3/20 = 2.35 must be 2.4, not 2.3). The result is clamped to 1–10.
+- **No thresholds:** `grade_config` is null and there is no pass/fail colouring; cijfer badges use the neutral `CIJFER_COLORS`.
+- **Storage:** the confirmed cijfer is stored in `StudentGrade.grade` as `"7.3"` (dot decimal, one decimal); the UI shows a Dutch comma (`formatCijfer` → "7,3"). No schema change and no migration. `is_manual` is true when the teacher entered a cijfer that differs from the calculated one.
+- **Review round** (`Review.jsx` and the inline review in `InhalerGrade.jsx`): `CijferInput` shows the calculated cijfer and lets the teacher type another one (1–10, comma or dot, rounded to one decimal). "Herstel automatische beoordeling" restores the calculated one. Editing a score recalculates the cijfer unless it was overridden.
+- **Shown in:** review sidebar chips, `StudentProgress.jsx` (session table and historical snapshot chips), the per-student PDF rubric (`StudentRubric.jsx`: "Cijfer 7,3" badge plus the formula line), and the "Normering" card on the grading screen (`Grade.jsx`).
 
 ### Schema migrations (`backend/main.py`)
 `_migrate_db()` runs at every startup. In addition to the `learning_goal` columns, it now also adds:
@@ -395,6 +417,7 @@ A `Test` and its `Question`s are never modified during a session. Multiple sessi
 - **Grading order** — Q1 now uses type-to-select (see Section 6). `shouldEnterQ1Mode()` in `Grade.jsx` (imported from `utils/gradingLogic.js`) detects whether to render the Q1 input UI or the regular flow. The original bug (Q2+ used alphabetical instead of saved order) is still fixed via `getOrderedStudents()` checking `sess.student_order?.length`. Do not regress either. The Q1 UI now correctly distinguishes applicable vs non-applicable students using `q1IsApplicable`: applicable students get the score input flow, non-applicable students get "n.v.t." + "Toevoegen →" (saves excluded score). Do not revert to always showing a score input.
 - **Autofocus on score input** — the score number input uses a `scoreInputRef` + `useEffect` to focus and select the input whenever the current question/student changes (including on first render of the regular flow), so the teacher can type immediately. The input does **not** have a bare `autoFocus` attribute; the ref+effect is the single focus mechanism. Removing it breaks keyboard-first grading. The input also handles `Enter` (advance), `ArrowRight` (advance), and `ArrowLeft` (go back).
 - **Resume position on page load** — `findResumePosition()` in `Grade.jsx` scans questions and applicable students to find the first entry without a completed score, so a session can be resumed after closing the browser. Do not replace this with always starting at Q1/S1.
+- **`CijferInput` status line and confirm guard** — the cijfer field commits on blur, so anything that appears below it at that moment (the "Automatisch … Herstel" hint, the invalid message) would push "Bevestigen →" / "Herstel" down between mousedown and mouseup and swallow the click, forcing a second click. The status line therefore has a fixed `minHeight` and holds all of those texts; do not move them out into the parent or make the line collapse. `onInvalidChange` also keeps "Bevestigen" disabled while the field holds text that is not a cijfer, so a typo such as "85" is never silently replaced by the calculated cijfer and confirmed. Keep both.
 
 ---
 

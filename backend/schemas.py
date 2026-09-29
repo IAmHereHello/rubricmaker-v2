@@ -173,7 +173,7 @@ class SchoolYearAdvanceRequest(BaseModel):
 # ── Student grades ────────────────────────────────────────────────────────────
 
 class StudentGradeUpsert(BaseModel):
-    grade: str       # "beheerst" | "expert" | "in_ontwikkeling"
+    grade: str       # "beheerst" | "expert" | "in_ontwikkeling", or a cijfer such as "7.3"
     is_manual: bool = False
     review_done: bool = False
 

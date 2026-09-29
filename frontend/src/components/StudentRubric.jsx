@@ -1,6 +1,7 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts'
 import RouteBadge from './RouteBadge.jsx'
 import { LEVEL_LABELS, ROUTE_COLORS } from '../constants.js'
+import { isCijfer, formatCijfer, CIJFER_FORMULA } from '../utils/cijfer.js'
 
 const GRADE_LABELS = { expert: 'Expert', beheerst: 'Beheerst', in_ontwikkeling: 'In Ontwikkeling' }
 const GRADE_STYLES = {
@@ -24,6 +25,7 @@ function computeGoals(questions, scores, studentId) {
 }
 
 function formatThreshold(test, route) {
+  if (test?.grading_method === 'cijfer') return `Cijfer = ${CIJFER_FORMULA}`
   if (!test?.grading_method || !test?.grade_config) return null
   const cfg = test.grade_config[route]
   if (!cfg) return null
@@ -116,6 +118,11 @@ export default function StudentRubric({ student, test, session, questions, score
             {grade?.grade && GRADE_STYLES[grade.grade] && (
               <span style={{ padding: '4px 12px', borderRadius: 4, fontWeight: 700, fontSize: 12, ...GRADE_STYLES[grade.grade] }}>
                 {GRADE_LABELS[grade.grade]}
+              </span>
+            )}
+            {isCijfer(grade?.grade) && (
+              <span style={{ padding: '4px 12px', borderRadius: 4, fontWeight: 700, fontSize: 12, background: '#eef2f8', color: '#1e3a5f', border: '1px solid #c0c8d8' }}>
+                Cijfer {formatCijfer(grade.grade)}
               </span>
             )}
           </div>
