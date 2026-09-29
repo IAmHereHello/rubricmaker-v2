@@ -56,11 +56,21 @@ export function getCijferConfig(gradeConfig) {
   }
 }
 
-export function calcCijfer(scored, max, gradeConfig) {
+// Each "sterretje" (star) is a deduction for a mathematical inaccuracy.
+export const STAR_VALUE = 0.5
+export const MIN_CIJFER = 1
+
+export function calcCijfer(scored, max, gradeConfig, stars = 0) {
   if (!max) return null
   const { multiplier, offset } = getCijferConfig(gradeConfig)
-  const value = (scored / max) * multiplier + offset
+  const value = Math.max(MIN_CIJFER, (scored / max) * multiplier + offset - STAR_VALUE * (stars || 0))
   return (Math.round(value * 10) / 10).toFixed(1)
+}
+
+// Shift an already-set cijfer when the star count changes (keeps manual overrides in sync)
+export function shiftCijfer(grade, starDelta) {
+  const v = Math.min(10, Math.max(MIN_CIJFER, Number(grade) - STAR_VALUE * starDelta))
+  return (Math.round(v * 10) / 10).toFixed(1)
 }
 
 export function isCijferGrade(grade) {

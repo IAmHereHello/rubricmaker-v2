@@ -3,8 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
 import RouteBadge from '../components/RouteBadge.jsx'
 import CijferInput from '../components/CijferInput.jsx'
+import StarInput from '../components/StarInput.jsx'
 import { pyramidLabel } from '../constants.js'
-import { isApplicableForQuestion, calcCijfer, formatCijferFormula, gradeLabel } from '../utils/gradingLogic.js'
+import { isApplicableForQuestion, calcCijfer, shiftCijfer, formatCijferFormula, gradeLabel } from '../utils/gradingLogic.js'
 
 const GRADE_OPTIONS = [
   { value: 'expert',          label: 'Expert' },
@@ -14,7 +15,7 @@ const GRADE_OPTIONS = [
 const GRADE_COLORS = { expert: '#2e7d32', beheerst: '#1a6ecc', in_ontwikkeling: '#c07000' }
 const GRADE_BG    = { expert: '#e8f5e9', beheerst: '#e8f0fc', in_ontwikkeling: '#fff3e0' }
 
-function computeGrade(student, questions, scoreMap, gradingMethod, gradeConfig) {
+function computeGrade(student, questions, scoreMap, gradingMethod, gradeConfig, stars = 0) {
   if (!gradingMethod || !gradeConfig) return null
   const applicable = questions.filter(q => (q.routes || []).includes(student.route))
   if (gradingMethod === 'cijfer') {
@@ -23,7 +24,7 @@ function computeGrade(student, questions, scoreMap, gradingMethod, gradeConfig) 
       const sc = scoreMap[`${q.id}-${student.id}`]
       if (sc && !sc.excluded && sc.points !== null) { scored += sc.points; maxPts += q.max_score }
     }
-    return calcCijfer(scored, maxPts, gradeConfig)
+    return calcCijfer(scored, maxPts, gradeConfig, stars)
   }
   const routeCfg = gradeConfig[student.route]
   if (!routeCfg) return null
@@ -77,6 +78,7 @@ export default function InhalerGrade() {
   // Review state
   const [manualGrade, setManualGrade] = useState(null)
   const [isManual, setIsManual]       = useState(false)
+  const [stars, setStars]             = useState(0)
   const [reviewSaving, setReviewSaving] = useState(false)
   const [editKey, setEditKey] = useState(null)
   const [editVal, setEditVal] = useState('')
@@ -266,14 +268,19 @@ export default function InhalerGrade() {
   // ── Review helpers ────────────────────────────────────────────────────────────
   const computedGrade = useMemo(() => {
     if (!student || !test || phase !== 'review') return null
-    return computeGrade(student, test.questions, scoreMap, test.grading_method, test.grade_config)
-  }, [student?.id, scoreMap, test, phase])
+    return computeGrade(student, test.questions, scoreMap, test.grading_method, test.grade_config, stars)
+  }, [student?.id, scoreMap, test, phase, stars])
 
   const displayGrade = isManual ? manualGrade : computedGrade
 
   function handleSetGrade(grade) {
     setManualGrade(grade)
     setIsManual(grade !== computedGrade)
+  }
+
+  function handleSetStars(n) {
+    if (isManual && manualGrade) setManualGrade(shiftCijfer(manualGrade, n - stars))
+    setStars(n)
   }
 
   async function startEditScore(q) {
@@ -314,6 +321,7 @@ export default function InhalerGrade() {
         grade: displayGrade,
         is_manual: isManual,
         review_done: true,
+        stars: test.grading_method === 'cijfer' ? stars : 0,
       })
       const newOrder = [...(session.student_order || []), student.id]
       await api.setSessionOrder(id, { student_order: newOrder })
@@ -446,7 +454,10 @@ export default function InhalerGrade() {
               Beoordeling
             </div>
             {test.grading_method === 'cijfer' ? (
-              <CijferInput value={displayGrade} onChange={handleSetGrade} />
+              <>
+                <StarInput value={stars} onChange={handleSetStars} />
+                <CijferInput value={displayGrade} onChange={handleSetGrade} />
+              </>
             ) : (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
               {GRADE_OPTIONS.map(opt => {

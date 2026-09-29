@@ -92,6 +92,7 @@ class StudentGrade(Base):
     grade = Column(String, nullable=False)   # "beheerst" | "expert" | "in_ontwikkeling" | cijfer as string, e.g. "7.4"
     is_manual = Column(Boolean, default=False)
     review_done = Column(Boolean, default=False)
+    stars = Column(Integer, nullable=True, default=0)   # "sterretjes": 0.5 point off each (cijfer grading only)
 
     session = relationship("Session", back_populates="grades")
     student = relationship("Student", back_populates="grades")
