@@ -119,3 +119,11 @@ export function gradeLabel(grade) {
   if (GRADE_LABELS[grade]) return GRADE_LABELS[grade]
   return isCijferGrade(grade) ? formatCijfer(grade) : String(grade)
 }
+
+// Cijfer for display on any toets. A cijfer toets uses its own formula (and the
+// stored grade, which may be a manual override); other toetsen use the default 9 + 1.
+export function displayCijfer(test, scored, max, storedGrade, stars = 0) {
+  const isCijferTest = test?.grading_method === 'cijfer'
+  if (isCijferTest && isCijferGrade(storedGrade)) return Number(storedGrade).toFixed(1)
+  return calcCijfer(scored, max, isCijferTest ? test.grade_config : null, isCijferTest ? stars : 0)
+}

@@ -5,7 +5,7 @@ import RouteBadge from '../components/RouteBadge.jsx'
 import CijferInput from '../components/CijferInput.jsx'
 import StarInput from '../components/StarInput.jsx'
 import { pyramidLabel } from '../constants.js'
-import { calcCijfer, shiftCijfer, formatCijferFormula, gradeLabel } from '../utils/gradingLogic.js'
+import { displayCijfer, formatCijfer, calcCijfer, shiftCijfer, formatCijferFormula, gradeLabel } from '../utils/gradingLogic.js'
 
 const GRADE_OPTIONS = [
   { value: 'expert',         label: 'Expert' },
@@ -528,6 +528,13 @@ export default function Review() {
             {thresholdText && (
               <div className="text-muted" style={{ fontSize: 12, marginBottom: 12 }}>
                 Normering ({student.route}): {thresholdText}
+              </div>
+            )}
+
+            {test.grading_method !== 'cijfer' && totals.max > 0 && (
+              <div style={{ fontSize: 13, marginBottom: 12 }}>
+                Cijfer: <strong>{formatCijfer(displayCijfer(test, totals.scored, totals.max, null))}</strong>
+                <span className="text-muted" style={{ marginLeft: 6, fontSize: 12 }}>(punten / totaal × 9 + 1)</span>
               </div>
             )}
 

@@ -3,6 +3,7 @@ import { useParams, useSearchParams, Link } from 'react-router-dom'
 import * as api from '../api.js'
 import RouteBadge from '../components/RouteBadge.jsx'
 import { LEVEL_LABELS } from '../constants.js'
+import { displayCijfer, formatCijfer } from '../utils/gradingLogic.js'
 import { exportPDF } from '../utils/exportPDF.js'
 import { exportRubricsPDF, exportRubricsPerStudentPDF } from '../utils/exportRubric.js'
 import StudentRubric from '../components/StudentRubric.jsx'
@@ -43,7 +44,7 @@ function computeGoals(questions, scores, studentId) {
   }
 }
 
-function StudentView({ data, selectedId, setSelectedId, onExportRubric, isExportingRubric }) {
+function StudentView({ data, selectedId, setSelectedId, onExportRubric, isExportingRubric, grades }) {
   const student = data.students.find(s => s.id === selectedId)
 
   let totalScored = 0, totalMax = 0
@@ -83,6 +84,7 @@ function StudentView({ data, selectedId, setSelectedId, onExportRubric, isExport
             <span className="text-muted" style={{ marginLeft: 6 }}>
               ({Math.round(totalScored / totalMax * 100)}%)
             </span>
+            {' · '}Cijfer: <strong>{formatCijfer(displayCijfer(data.test, totalScored, totalMax, grades?.[selectedId]?.grade, grades?.[selectedId]?.stars))}</strong>
           </div>
         )}
         {goalsTotal > 0 && (
@@ -259,6 +261,7 @@ export default function SessionReport() {
   const [exportTarget, setExportTarget] = useState(null)
   const [isExportingRubric, setIsExportingRubric] = useState(false)
   const [showClassAverage, setShowClassAverage] = useState(true)
+  const [showCijfer, setShowCijfer] = useState(false)
   const reportRef = useRef(null)
   const rubricRefs = useRef({})
 
@@ -266,6 +269,7 @@ export default function SessionReport() {
     api.getSessionReport(id)
       .then(d => {
         setData(d)
+        setShowCijfer(d.test.grading_method === 'cijfer')
         const paramId = searchParams.get('student') ? parseInt(searchParams.get('student')) : null
         const initial = paramId && d.students.some(s => s.id === paramId)
           ? paramId
@@ -327,7 +331,7 @@ export default function SessionReport() {
 
   function handleExportRubric(studentIds, perStudent = false) {
     rubricRefs.current = {}
-    setExportTarget({ studentIds, perStudent, showClassAverage })
+    setExportTarget({ studentIds, perStudent, showClassAverage, showCijfer })
   }
 
   if (!data) return <div className="page">{error || 'Laden...'}</div>
@@ -349,6 +353,14 @@ export default function SessionReport() {
               onChange={e => setShowClassAverage(e.target.checked)}
             />
             Klasgemiddelde tonen op rapport
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#555', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={showCijfer}
+              onChange={e => setShowCijfer(e.target.checked)}
+            />
+            Cijfer tonen op rapport
           </label>
           <button className="btn btn-secondary" onClick={handleExport} disabled={exporting}>
             {exporting ? 'Exporteren...' : 'Exporteer PDF'}
@@ -397,6 +409,7 @@ export default function SessionReport() {
             selectedId={selectedStudentId}
             setSelectedId={setSelectedStudentId}
             onExportRubric={handleExportRubric}
+            grades={gradeMap}
             isExportingRubric={isExportingRubric}
           />
         ) : (
@@ -421,6 +434,7 @@ export default function SessionReport() {
                   classAverages={data.class_averages}
                   grade={gradeMap[sid] ?? null}
                   showClassAverage={exportTarget.showClassAverage}
+                  showCijfer={exportTarget.showCijfer}
                 />
               </div>
             )

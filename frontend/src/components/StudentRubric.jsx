@@ -1,7 +1,7 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts'
 import RouteBadge from './RouteBadge.jsx'
 import { LEVEL_LABELS, ROUTE_COLORS } from '../constants.js'
-import { STAR_VALUE, isCijferGrade, gradeLabel, formatCijferFormula } from '../utils/gradingLogic.js'
+import { STAR_VALUE, isCijferGrade, gradeLabel, formatCijferFormula, formatCijfer, displayCijfer } from '../utils/gradingLogic.js'
 
 const GRADE_STYLES = {
   expert: { background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d' },
@@ -38,7 +38,7 @@ function formatThreshold(test, route) {
   return null
 }
 
-export default function StudentRubric({ student, test, session, questions, scores, classAverages, grade, showClassAverage = true }) {
+export default function StudentRubric({ student, test, session, questions, scores, classAverages, grade, showClassAverage = true, showCijfer }) {
   const applicable = questions.filter(q => !scores[`${student.id}|${q.id}`]?.excluded)
 
   let totalScored = 0, totalMax = 0
@@ -49,6 +49,11 @@ export default function StudentRubric({ student, test, session, questions, score
       totalMax += q.max_score
     }
   })
+
+  const isCijferTest = test.grading_method === 'cijfer'
+  const cijferValue = (showCijfer ?? isCijferTest)
+    ? displayCijfer(test, totalScored, totalMax, grade?.grade, grade?.stars)
+    : null
 
   const goalGroups = computeGoals(questions, scores, student.id)
   const goalNames = Object.keys(goalGroups).filter(n => goalGroups[n].total > 0)
@@ -114,13 +119,18 @@ export default function StudentRubric({ student, test, session, questions, score
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <RouteBadge route={student.route} />
-            {grade?.grade && (GRADE_STYLES[grade.grade] || isCijferGrade(grade.grade)) && (
-              <span style={{ padding: '4px 12px', borderRadius: 4, fontWeight: 700, fontSize: isCijferGrade(grade.grade) ? 16 : 12, ...(GRADE_STYLES[grade.grade] ?? GRADE_STYLES.beheerst) }}>
+            {!isCijferTest && grade?.grade && GRADE_STYLES[grade.grade] && (
+              <span style={{ padding: '4px 12px', borderRadius: 4, fontWeight: 700, fontSize: 12, ...GRADE_STYLES[grade.grade] }}>
                 {gradeLabel(grade.grade)}
               </span>
             )}
+            {cijferValue && (
+              <span style={{ padding: '4px 12px', borderRadius: 4, fontWeight: 700, fontSize: 16, ...GRADE_STYLES.beheerst }}>
+                {formatCijfer(cijferValue)}
+              </span>
+            )}
           </div>
-          {test.grading_method === 'cijfer' && grade?.stars > 0 && (
+          {isCijferTest && cijferValue && grade?.stars > 0 && (
             <div style={{ fontSize: 11, color: '#b45309', textAlign: 'right' }}>
               {grade.stars} sterretje{grade.stars === 1 ? '' : 's'} (−{String(grade.stars * STAR_VALUE).replace('.', ',')})
             </div>
