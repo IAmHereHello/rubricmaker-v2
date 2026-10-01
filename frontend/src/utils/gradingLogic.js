@@ -40,6 +40,30 @@ export function findResumePosition(t, orderedStudents, scoreMap) {
   return [t.questions.length, 0]
 }
 
+// ── Vertical grading (per student: A1, A2, A3, B1, ...) ──────────────────────
+
+// Indices (into t.questions) of the questions that apply to this student, in test order.
+export function getApplicableQuestionIndices(t, student) {
+  if (!t || !student) return []
+  return t.questions.reduce((acc, q, i) => {
+    if (isApplicableForQuestion(student, q)) acc.push(i)
+    return acc
+  }, [])
+}
+
+// First (student, question) in the stack that still lacks a score, or null when everyone
+// in the stack is complete. `pos` is an index into getApplicableQuestionIndices().
+export function findVerticalResume(t, orderedStudents, scoreMap) {
+  for (const student of orderedStudents) {
+    const indices = getApplicableQuestionIndices(t, student)
+    for (let pos = 0; pos < indices.length; pos++) {
+      const sc = scoreMap[`${t.questions[indices[pos]].id}-${student.id}`]
+      if (!sc || (sc.points === null && !sc.excluded)) return { studentId: student.id, pos }
+    }
+  }
+  return null
+}
+
 // ── Cijfer (1-10) grading ────────────────────────────────────────────────────
 // cijfer = punten / totaal * multiplier + offset  (default: * 9 + 1)
 // Stored as a string in student_grades.grade, e.g. "7.4".

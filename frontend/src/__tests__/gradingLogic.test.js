@@ -7,6 +7,8 @@ import {
   shiftCijfer,
   formatCijfer,
   gradeLabel,
+  getApplicableQuestionIndices,
+  findVerticalResume,
 } from '../utils/gradingLogic.js'
 
 const orangeQ1 = { id: 1, routes: ['oranje'], max_score: 10 }
@@ -82,5 +84,41 @@ describe('cijfer grading', () => {
     expect(formatCijfer('7.4')).toBe('7,4')
     expect(gradeLabel('7.4')).toBe('7,4')
     expect(gradeLabel('expert')).toBe('Expert')
+  })
+})
+
+describe('vertical grading', () => {
+  const t = {
+    questions: [
+      { id: 1, routes: ['oranje', 'geel'] },
+      { id: 2, routes: ['oranje'] },
+      { id: 3, routes: ['oranje', 'geel'] },
+    ],
+  }
+  const A = { id: 10, route: 'oranje' }
+  const B = { id: 11, route: 'geel' }
+
+  test('applicable question indices follow the student route', () => {
+    expect(getApplicableQuestionIndices(t, A)).toEqual([0, 1, 2])
+    expect(getApplicableQuestionIndices(t, B)).toEqual([0, 2])
+  })
+
+  test('resume starts at the first unscored question of the first incomplete student', () => {
+    const scores = { '1-10': { points: 2 }, '2-10': { points: 1 } }
+    expect(findVerticalResume(t, [A, B], scores)).toEqual({ studentId: 10, pos: 2 })
+  })
+
+  test('resume moves on to the next student when the first is complete', () => {
+    const scores = { '1-10': { points: 2 }, '2-10': { points: 1 }, '3-10': { points: 0 } }
+    expect(findVerticalResume(t, [A, B], scores)).toEqual({ studentId: 11, pos: 0 })
+  })
+
+  test('excluded scores count as done, 0 points counts as graded', () => {
+    const scores = { '1-11': { points: 0 }, '3-11': { points: null, excluded: true } }
+    expect(findVerticalResume(t, [B], scores)).toBeNull()
+  })
+
+  test('empty stack has nothing to resume', () => {
+    expect(findVerticalResume(t, [], {})).toBeNull()
   })
 })

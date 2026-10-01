@@ -17,15 +17,22 @@ def list_sessions(db: DBSession = Depends(get_db)):
         test = db.query(TestModel).filter(TestModel.id == s.test_id).first()
         order = s.student_order or []
 
+        mode = s.grading_mode or "horizontal"
+        # Vertical mode: while the stack is still open the expected total covers the whole
+        # class, so a fully graded student does not make the session look complete.
+        count_ids = order
+        if mode == "vertical" and not s.stack_closed:
+            count_ids = [st.id for st in db.query(StudentModel).filter(StudentModel.class_name == s.class_name).all()]
+
         if not order:
             total = 0
             graded = 0
         else:
-            stud_rows = db.query(StudentModel).filter(StudentModel.id.in_(order)).all()
+            stud_rows = db.query(StudentModel).filter(StudentModel.id.in_(count_ids)).all()
             route_map = {st.id: st.route for st in stud_rows}
             questions = test.questions if test else []
             total = sum(
-                sum(1 for sid in order if route_map.get(sid) in (q.routes or []))
+                sum(1 for sid in count_ids if route_map.get(sid) in (q.routes or []))
                 for q in questions
             )
             graded = db.query(Score).filter(
@@ -62,6 +69,7 @@ def list_sessions(db: DBSession = Depends(get_db)):
             has_grading=has_grading,
             dismissed_inhalers=s.dismissed_inhalers or [],
             applicable_routes=applicable_routes,
+            grading_mode=mode,
         ))
     return result
 
@@ -90,6 +98,8 @@ def get_session(id: int, db: DBSession = Depends(get_db)):
         "created_at": obj.created_at,
         "student_order": obj.student_order or [],
         "dismissed_inhalers": obj.dismissed_inhalers or [],
+        "grading_mode": obj.grading_mode or "horizontal",
+        "stack_closed": bool(obj.stack_closed),
         "scores": [
             {
                 "id": s.id,
@@ -110,6 +120,8 @@ def set_student_order(id: int, body: SessionOrderUpdate, db: DBSession = Depends
     if not obj:
         raise HTTPException(404, "Sessie niet gevonden")
     obj.student_order = body.student_order
+    if body.stack_closed is not None:
+        obj.stack_closed = body.stack_closed
     db.commit()
     db.refresh(obj)
     return obj

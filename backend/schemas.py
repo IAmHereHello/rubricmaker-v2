@@ -1,5 +1,5 @@
 from pydantic import BaseModel, field_validator
-from typing import Optional, List
+from typing import Optional, List, Literal
 from datetime import datetime
 
 
@@ -94,6 +94,7 @@ class QuestionReorder(BaseModel):
 class SessionCreate(BaseModel):
     test_id: int
     class_name: str
+    grading_mode: Literal["horizontal", "vertical"] = "horizontal"
 
 class SessionOut(BaseModel):
     id: int
@@ -102,7 +103,19 @@ class SessionOut(BaseModel):
     created_at: datetime
     student_order: List[int]
     dismissed_inhalers: List[int] = []
+    grading_mode: str = "horizontal"
+    stack_closed: bool = False
     model_config = {"from_attributes": True}
+
+    @field_validator('grading_mode', mode='before')
+    @classmethod
+    def default_mode(cls, v):
+        return v or "horizontal"
+
+    @field_validator('stack_closed', mode='before')
+    @classmethod
+    def coerce_closed(cls, v):
+        return bool(v)
 
     @field_validator('student_order', 'dismissed_inhalers', mode='before')
     @classmethod
@@ -123,9 +136,11 @@ class SessionListOut(BaseModel):
     has_grading: bool = False
     dismissed_inhalers: List[int] = []
     applicable_routes: List[str] = []
+    grading_mode: str = "horizontal"
 
 class SessionOrderUpdate(BaseModel):
     student_order: List[int]
+    stack_closed: Optional[bool] = None
 
 class InhalerDismissBody(BaseModel):
     student_id: int

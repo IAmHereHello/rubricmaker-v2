@@ -346,8 +346,17 @@ When all questions are graded AND `test.grading_method` is set, `Grade.jsx` redi
 - `ALTER TABLE tests ADD COLUMN grading_method TEXT`
 - `ALTER TABLE tests ADD COLUMN grade_config TEXT`
 - `ALTER TABLE sessions ADD COLUMN dismissed_inhalers TEXT`
+- `ALTER TABLE sessions ADD COLUMN grading_mode TEXT DEFAULT 'horizontal'`
+- `ALTER TABLE sessions ADD COLUMN stack_closed BOOLEAN DEFAULT 0`
 
 The `student_grades` table is created by `models.Base.metadata.create_all()` (SQLAlchemy creates it if it doesn't exist, safe for existing databases).
+
+### Vertical grading (per student)
+A session has `grading_mode`: `"horizontal"` (default, per question; Q1 type-to-select then Q2+) or `"vertical"` (per student: A1, A2, A3, B1, ...). Chosen on `SessionNew.jsx` and stored on the session. `stack_closed` (Boolean) marks that the teacher has finished entering the stack in vertical mode.
+
+In vertical mode `Grade.jsx` has no Q1 mode. The teacher types a student name (same datalist as Q1), the student is appended to `student_order` immediately, and all questions applicable to that route are shown in test order (`vStudentId`, `vPos` index into `getApplicableQuestionIndices()`). After the last question, non-applicable questions get excluded scores (`createExcludedForStudent`) and the view returns to the name input. The stack closes via **"Einde van de stapel"** or automatically when every class student is entered (`PUT /sessions/{id}/order` with `stack_closed: true`), after which the usual done card / review redirect applies.
+
+Resume uses `findVerticalResume()` in `utils/gradingLogic.js` (first student in `student_order` with an unscored applicable question). `GET /sessions` computes `total_count` over the whole class while a vertical stack is open, so a fully graded student does not make the session look complete.
 
 ### Previous scores panel is collapsed by default
 `showPrev` initialises to `false` in `Grade.jsx`. This is intentional: the teacher should not see a student's previous question scores while grading the current question, to avoid anchoring bias. Do not initialise it to `true`.

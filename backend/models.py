@@ -61,6 +61,8 @@ class Session(Base):
     created_at = Column(DateTime, server_default=func.now())
     student_order = Column(JSON, default=list)        # list[int] — student IDs in grading order
     dismissed_inhalers = Column(JSON, default=list)   # list[int] — student IDs dismissed from retakes
+    grading_mode = Column(String, default="horizontal")  # "horizontal" (per question) | "vertical" (per student)
+    stack_closed = Column(Boolean, default=False)     # vertical mode: True once the teacher has entered the whole stack
 
     test = relationship("Test", back_populates="sessions")
     scores = relationship("Score", back_populates="session", cascade="all, delete-orphan")

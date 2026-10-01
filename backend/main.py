@@ -17,6 +17,8 @@ def _migrate_db():
             "ALTER TABLE tests ADD COLUMN grading_method TEXT",
             "ALTER TABLE tests ADD COLUMN grade_config TEXT",
             "ALTER TABLE sessions ADD COLUMN dismissed_inhalers TEXT",
+            "ALTER TABLE sessions ADD COLUMN grading_mode TEXT DEFAULT 'horizontal'",
+            "ALTER TABLE sessions ADD COLUMN stack_closed BOOLEAN DEFAULT 0",
             "ALTER TABLE scores ADD COLUMN comment TEXT",
             "ALTER TABLE student_grades ADD COLUMN stars INTEGER DEFAULT 0",
         ]:

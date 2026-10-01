@@ -9,6 +9,8 @@ import {
   shouldEnterQ1Mode,
   findResumePosition,
   formatCijferFormula,
+  getApplicableQuestionIndices,
+  findVerticalResume,
 } from '../utils/gradingLogic.js'
 
 export default function Grade() {
@@ -44,6 +46,13 @@ export default function Grade() {
   const [q1EditingItemId, setQ1EditingItemId] = useState(null)
   const [q1EditScoreVal, setQ1EditScoreVal] = useState('')
 
+  // Vertical mode (per student): which student is open and which of their applicable questions
+  const [vStudentId, setVStudentId] = useState(null)
+  const [vPos, setVPos] = useState(0)
+  const [vName, setVName] = useState('')
+  const [vBusy, setVBusy] = useState(false)
+  const vNameRef = useRef(null)
+
   // ── Initial load ────────────────────────────────────────────────────────────
   useEffect(() => {
     async function load() {
@@ -64,7 +73,16 @@ export default function Grade() {
         setStudents(sortedStuds)
         setScores(scoreMap)
 
-        if (shouldEnterQ1Mode(sess, t, scoreMap)) {
+        if (sess.grading_mode === 'vertical') {
+          const orderedStuds = (sess.student_order || []).length ? getOrderedStudents(sess, sortedStuds) : []
+          const resume = findVerticalResume(t, orderedStuds, scoreMap)
+          if (resume) {
+            setVStudentId(resume.studentId)
+            setVPos(resume.pos)
+          } else if (sess.stack_closed) {
+            setDone(true)
+          }
+        } else if (shouldEnterQ1Mode(sess, t, scoreMap)) {
           setQ1Mode(true)
         } else {
           const orderedStuds = getOrderedStudents(sess, sortedStuds)
@@ -89,14 +107,20 @@ export default function Grade() {
     [session?.student_order, students]
   )
 
-  const currentQuestion = test?.questions[qIdx]
+  const isVertical = session?.grading_mode === 'vertical'
+  const vStudent = useMemo(() => students.find(s => s.id === vStudentId) ?? null, [students, vStudentId])
+  const vQIndices = useMemo(() => getApplicableQuestionIndices(test, vStudent), [test, vStudent])
+
+  const currentQuestion = isVertical ? test?.questions[vQIndices[vPos]] : test?.questions[qIdx]
+  // Index of the open question within the whole test (qIdx in horizontal mode)
+  const curQIdx = isVertical ? (vQIndices[vPos] ?? 0) : qIdx
 
   const applicableStudents = useMemo(() => {
     if (!currentQuestion) return []
     return orderedStudents.filter(s => (currentQuestion.routes || []).includes(s.route))
   }, [orderedStudents, currentQuestion])
 
-  const currentStudent = applicableStudents[sIdx]
+  const currentStudent = isVertical ? vStudent : applicableStudents[sIdx]
 
   const scoreKey = (qid, sid) => `${qid}-${sid}`
 
@@ -132,7 +156,48 @@ export default function Grade() {
       .filter(Boolean)
   }, [q1Mode, session?.student_order, students, scores, test])
 
-  // ── Effects ──────────────────────────────────────────────────────────────────
+  // ── Derived state (vertical name-pick) ───────────────────────────────────────
+  const vAvailableStudents = useMemo(() => {
+    if (!isVertical) return []
+    const addedIds = new Set(session?.student_order || [])
+    return students.filter(s => !addedIds.has(s.id))
+  }, [isVertical, students, session?.student_order])
+
+  const vSelectedStudent = useMemo(() => {
+    if (!vName.trim()) return null
+    const needle = vName.trim().toLowerCase()
+    return vAvailableStudents.find(s => s.name.toLowerCase() === needle) ?? null
+  }, [vName, vAvailableStudents])
+
+  const vEnteredList = useMemo(() => {
+    if (!isVertical || !test) return []
+    return (session?.student_order || [])
+      .map(sid => {
+        const stud = students.find(s => s.id === sid)
+        if (!stud) return null
+        const idxs = getApplicableQuestionIndices(test, stud)
+        const complete = idxs.every(i => {
+          const sc = scores[scoreKey(test.questions[i].id, sid)]
+          return sc && (sc.points !== null && sc.points !== undefined)
+        })
+        return { id: sid, name: stud.name, complete }
+      })
+      .filter(Boolean)
+  }, [isVertical, session?.student_order, students, scores, test])
+
+  // ── Effects ──
+  // Vertical: focus the name input whenever we are (back) in the name-pick phase
+  useEffect(() => {
+    if (isVertical && test && !vStudentId && !done) vNameRef.current?.focus()
+  }, [isVertical, test, vStudentId, done])
+
+  // Vertical: auto-select the last remaining student
+  useEffect(() => {
+    if (isVertical && !vStudentId && vAvailableStudents.length === 1) {
+      setVName(vAvailableStudents[0].name)
+    }
+  }, [isVertical, vStudentId, vAvailableStudents])
+  // ── Effects (continued) ──────────────────────────────────────────
   // Sync input value when student/question changes (regular mode)
   useEffect(() => {
     if (!currentQuestion || !currentStudent) return
@@ -227,6 +292,65 @@ export default function Grade() {
         setScores(prev => ({ ...prev, [key]: saved }))
       }
     }
+  }
+
+  async function createExcludedForStudent(student) {
+    for (const q of test.questions) {
+      if (isApplicableForQuestion(student, q)) continue
+      const key = scoreKey(q.id, student.id)
+      if (!scores[key]) {
+        const saved = await api.upsertScore({
+          session_id: parseInt(id),
+          student_id: student.id,
+          question_id: q.id,
+          points: null,
+          excluded: true,
+        })
+        setScores(prev => ({ ...prev, [key]: saved }))
+      }
+    }
+  }
+
+  // ── Vertical handlers ────────────────────────────────────────────────────────
+  async function closeStack(order) {
+    const updated = await api.setSessionOrder(id, { student_order: order, stack_closed: true })
+    setSession(updated)
+    setDone(true)
+  }
+
+  async function finishVStudent(student, order) {
+    await createExcludedForStudent(student)
+    setVStudentId(null)
+    setVPos(0)
+    if (order.length >= students.length) await closeStack(order)
+  }
+
+  async function handleVPick() {
+    if (vBusy || !vSelectedStudent) return
+    setVBusy(true)
+    try {
+      const student = vSelectedStudent
+      const newOrder = [...(session.student_order || []), student.id]
+      const updated = await api.setSessionOrder(id, { student_order: newOrder })
+      setSession(updated)
+      setVName('')
+      if (getApplicableQuestionIndices(test, student).length === 0) {
+        setSkipNotice(`${student.name} heeft geen vragen voor deze route en is overgeslagen.`)
+        await finishVStudent(student, newOrder)
+      } else {
+        setVPos(0)
+        setVStudentId(student.id)
+      }
+    } catch {
+      setError('Opslaan mislukt.')
+    } finally {
+      setVBusy(false)
+    }
+  }
+
+  async function handleEndVStack() {
+    if (!(session?.student_order?.length)) return
+    await closeStack(session.student_order)
   }
 
   // ── Q1 handlers ──────────────────────────────────────────────────────────────
@@ -367,6 +491,10 @@ export default function Grade() {
   // ── Regular navigation ───────────────────────────────────────────────────────
   async function handlePrev() {
     await persistScore()
+    if (isVertical) {
+      if (vPos > 0) setVPos(p => p - 1)
+      return
+    }
     if (sIdx > 0) {
       setSIdx(s => s - 1)
     } else if (qIdx > 0) {
@@ -384,11 +512,19 @@ export default function Grade() {
 
   async function handleNext() {
     await persistScore()
+    if (isVertical) {
+      if (vPos < vQIndices.length - 1) setVPos(p => p + 1)
+      return
+    }
     if (sIdx < applicableStudents.length - 1) setSIdx(s => s + 1)
   }
 
   async function handleNextQuestion() {
     await persistScore()
+    if (isVertical) {
+      await finishVStudent(vStudent, session.student_order || [])
+      return
+    }
     await createExcludedScores(currentQuestion, orderedStudents)
 
     let nextQIdx = qIdx + 1
@@ -428,7 +564,7 @@ export default function Grade() {
   // ── Previous scores for sidebar ──────────────────────────────────────────────
   const prevScores = useMemo(() => {
     if (!currentStudent || !test) return []
-    return test.questions.slice(0, qIdx).map((q, i) => {
+    return test.questions.slice(0, curQIdx).map((q, i) => {
       const sc = scores[scoreKey(q.id, currentStudent.id)]
       return {
         nr: i + 1,
@@ -442,11 +578,12 @@ export default function Grade() {
         comment: sc?.comment || '',
       }
     })
-  }, [currentStudent?.id, qIdx, scores, test])
+  }, [currentStudent?.id, curQIdx, scores, test])
 
   // ── Render ───────────────────────────────────────────────────────────────────
-  const isLastStudent = sIdx === applicableStudents.length - 1
-  const isLastQuestion = qIdx === test?.questions.length - 1
+  // Vertical: "last" means the student's last applicable question
+  const isLastStudent = isVertical ? vPos === vQIndices.length - 1 : sIdx === applicableStudents.length - 1
+  const isLastQuestion = isVertical ? false : qIdx === test?.questions.length - 1
 
   if (!test || !session) return <div className="page"><p>Laden...</p></div>
 
@@ -465,6 +602,121 @@ export default function Grade() {
           <div className="gap-8" style={{ justifyContent: 'center' }}>
             <Link to="/sessions/new" className="btn btn-primary">Nieuwe sessie</Link>
             <Link to={`/classes/${session.class_name}/overview`} className="btn btn-secondary">Klasoverzicht bekijken</Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Vertical name-pick render ────────────────────────────────────────────────
+  if (isVertical && !vStudent) {
+    const enteredCount = session.student_order?.length || 0
+    return (
+      <div className="page" style={{ maxWidth: 1040, marginLeft: 'auto', marginRight: 'auto' }}>
+        {error && <div className="alert alert-error">{error}</div>}
+        {skipNotice && (
+          <div className="alert" style={{ background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 6, padding: '10px 14px', marginBottom: 12, color: '#856404' }}>
+            {skipNotice}
+          </div>
+        )}
+
+        <div style={{ background: '#e0e3ea', borderRadius: 6, height: 6, marginBottom: 20 }}>
+          <div style={{
+            background: '#1e3a5f',
+            borderRadius: 6,
+            height: 6,
+            width: `${(vEnteredList.filter(e => e.complete).length / Math.max(students.length, 1)) * 100}%`,
+            transition: 'width .3s',
+          }} />
+        </div>
+
+        <div className="grade-wrap">
+          <div className="grade-main">
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#555', marginBottom: 6 }}>
+                Naam leerling
+                <span className="text-muted" style={{ fontWeight: 400, marginLeft: 8 }}>
+                  ({enteredCount} van {students.length} ingevoerd)
+                </span>
+              </div>
+              <input
+                ref={vNameRef}
+                type="text"
+                list="v-student-list"
+                value={vName}
+                onChange={e => setVName(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Escape') setVName('')
+                  if (e.key === 'Enter') handleVPick()
+                }}
+                placeholder="Begin met typen om een leerling te zoeken…"
+                style={{ width: '100%', fontSize: 15, padding: '9px 12px' }}
+                autoComplete="off"
+              />
+              <datalist id="v-student-list">
+                {vAvailableStudents.map(s => <option key={s.id} value={s.name} />)}
+              </datalist>
+            </div>
+
+            <div style={{ minHeight: 56, marginBottom: 28 }}>
+              {vSelectedStudent && (
+                <div className="grade-score-row">
+                  <span style={{ fontSize: 16, fontWeight: 700, color: '#1e3a5f' }}>{vSelectedStudent.name}</span>
+                  <RouteBadge route={vSelectedStudent.route} />
+                  <button className="btn btn-primary" onClick={handleVPick} disabled={vBusy}>
+                    {vBusy ? 'Laden…' : 'Start nakijken →'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {vEnteredList.length > 0 && (
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 8 }}>
+                  Ingevoerd
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {vEnteredList.map(item => (
+                    <div key={item.id} style={{ padding: '4px 10px', background: '#f0f3f8', borderRadius: 6, fontSize: 13 }}>
+                      {item.name}{' '}
+                      <span style={{ fontWeight: 700, color: item.complete ? '#4caf50' : '#c07000' }}>
+                        {item.complete ? '✓' : 'bezig'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ borderTop: '1px solid #e0e3ea', paddingTop: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button
+                className="btn btn-secondary"
+                onClick={handleEndVStack}
+                disabled={enteredCount === 0}
+                title="Stop met invoeren en rond de sessie af"
+              >
+                Einde van de stapel
+              </button>
+              <span className="text-muted" style={{ fontSize: 12 }}>
+                Niet-ingevoerde leerlingen worden overgeslagen in deze sessie.
+              </span>
+            </div>
+          </div>
+
+          <div className="grade-sidebar">
+            <div className="card" style={{ fontSize: 13 }}>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>{test.name}</div>
+              <div className="text-muted">Klas {session.class_name} · per leerling</div>
+              <hr className="divider" />
+              {test.questions.map((q, i) => (
+                <div key={q.id} style={{ padding: '3px 0', color: '#aaa', fontSize: 13 }}>
+                  V{i + 1} {q.domain}
+                </div>
+              ))}
+            </div>
+            {test.grading_method && test.grade_config && (
+              <NormeringCard gradeConfig={test.grade_config} gradingMethod={test.grading_method} />
+            )}
           </div>
         </div>
       </div>
@@ -705,7 +957,9 @@ export default function Grade() {
           background: '#1e3a5f',
           borderRadius: 6,
           height: 6,
-          width: `${((qIdx * applicableStudents.length + sIdx + 1) / (test.questions.length * Math.max(applicableStudents.length, 1))) * 100}%`,
+          width: isVertical
+            ? `${(((session.student_order?.length || 1) - 1 + (vPos + 1) / Math.max(vQIndices.length, 1)) / Math.max(students.length, 1)) * 100}%`
+            : `${((qIdx * applicableStudents.length + sIdx + 1) / (test.questions.length * Math.max(applicableStudents.length, 1))) * 100}%`,
           transition: 'width .3s',
         }} />
       </div>
@@ -716,13 +970,15 @@ export default function Grade() {
           <div style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
             <RouteBadge route={currentStudent.route} />
             <span className="grade-progress">
-              Vraag {qIdx + 1} van {test.questions.length} — Leerling {sIdx + 1} van {applicableStudents.length}
+              {isVertical
+                ? `Vraag ${curQIdx + 1} van ${test.questions.length} — Leerling ${(session.student_order || []).indexOf(currentStudent.id) + 1} van ${students.length}`
+                : `Vraag ${qIdx + 1} van ${test.questions.length} — Leerling ${sIdx + 1} van ${applicableStudents.length}`}
             </span>
           </div>
 
           <div className="grade-question-box">
             <div className="grade-question-label">
-              Vraag {qIdx + 1} · {currentQuestion.domain} · {pyramidLabel(currentQuestion.pyramid_level)} · max {currentQuestion.max_score} pt
+              Vraag {curQIdx + 1} · {currentQuestion.domain} · {pyramidLabel(currentQuestion.pyramid_level)} · max {currentQuestion.max_score} pt
             </div>
             <div className="grade-question-desc">{currentQuestion.description}</div>
             {currentQuestion.answer && (
@@ -783,23 +1039,33 @@ export default function Grade() {
           )}
 
           <div className="grade-nav-buttons">
-            <button className="btn btn-secondary" onClick={handlePrev} disabled={sIdx === 0 && qIdx === 0}>
-              ← Vorige leerling
+            <button
+              className="btn btn-secondary"
+              onClick={handlePrev}
+              disabled={isVertical ? vPos === 0 : sIdx === 0 && qIdx === 0}
+            >
+              {isVertical ? '← Vorige vraag' : '← Vorige leerling'}
             </button>
 
             {!isLastStudent && (
               <button className="btn btn-primary" onClick={handleNext}>
-                Volgende leerling →
+                {isVertical ? 'Volgende vraag →' : 'Volgende leerling →'}
               </button>
             )}
 
-            {isLastStudent && !isLastQuestion && (
+            {isVertical && isLastStudent && (
+              <button className="btn btn-primary" onClick={handleNextQuestion}>
+                Volgende leerling ↓
+              </button>
+            )}
+
+            {!isVertical && isLastStudent && !isLastQuestion && (
               <button className="btn btn-primary" onClick={handleNextQuestion}>
                 Volgende vraag ↓
               </button>
             )}
 
-            {isLastStudent && isLastQuestion && (
+            {!isVertical && isLastStudent && isLastQuestion && (
               <button className="btn btn-primary" onClick={handleNextQuestion}>
                 Afronden ✓
               </button>
@@ -851,8 +1117,8 @@ export default function Grade() {
             <div className="text-muted">Klas {session.class_name}</div>
             <hr className="divider" />
             {test.questions.map((q, i) => {
-              const isPast = i < qIdx
-              const isCurrent = i === qIdx
+              const isPast = i < curQIdx
+              const isCurrent = i === curQIdx
               return (
                 <div key={q.id} style={{
                   padding: '3px 0',

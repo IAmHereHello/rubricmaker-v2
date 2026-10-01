@@ -8,6 +8,7 @@ export default function SessionNew() {
   const [sessions, setSessions] = useState([])
   const [testId, setTestId] = useState('')
   const [className, setClassName] = useState('')
+  const [gradingMode, setGradingMode] = useState('horizontal')
   const [error, setError] = useState('')
   const navigate = useNavigate()
 
@@ -47,7 +48,7 @@ export default function SessionNew() {
   async function start() {
     if (!testId || !className) { setError('Selecteer een toets en een klas.'); return }
     try {
-      const session = await api.createSession({ test_id: parseInt(testId), class_name: className })
+      const session = await api.createSession({ test_id: parseInt(testId), class_name: className, grading_mode: gradingMode })
       navigate(`/sessions/${session.id}/grade`)
     } catch { setError('Sessie starten mislukt.') }
   }
@@ -91,7 +92,7 @@ export default function SessionNew() {
                 return (
                   <tr key={sess.id}>
                     <td>{new Date(sess.created_at).toLocaleDateString('nl-NL')}</td>
-                    <td>{sess.test_name}</td>
+                    <td>{sess.test_name}{sess.grading_mode === 'vertical' && <span className="text-muted" style={{ fontSize: 12 }}> · per leerling</span>}</td>
                     <td>{sess.class_name}</td>
                     <td>
                       <span style={{ color: progressColor, fontSize: 13 }}>
@@ -129,10 +130,17 @@ export default function SessionNew() {
             {tests.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </div>
-        <div className="field" style={{ marginBottom: 24 }}>
+        <div className="field" style={{ marginBottom: 16 }}>
           <label>Klas</label>
           <select value={className} onChange={e => setClassName(e.target.value)}>
             {classes.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div className="field" style={{ marginBottom: 24 }}>
+          <label>Nakijkvolgorde</label>
+          <select value={gradingMode} onChange={e => setGradingMode(e.target.value)}>
+            <option value="horizontal">Per vraag (A1, B1, C1, A2, B2, …)</option>
+            <option value="vertical">Per leerling (A1, A2, A3, B1, B2, …)</option>
           </select>
         </div>
         <button className="btn btn-primary" onClick={start} disabled={!testId || !className}>
