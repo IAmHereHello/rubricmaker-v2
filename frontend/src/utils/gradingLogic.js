@@ -57,11 +57,43 @@ export function findVerticalResume(t, orderedStudents, scoreMap) {
   for (const student of orderedStudents) {
     const indices = getApplicableQuestionIndices(t, student)
     for (let pos = 0; pos < indices.length; pos++) {
-      const sc = scoreMap[`${t.questions[indices[pos]].id}-${student.id}`]
-      if (!sc || (sc.points === null && !sc.excluded)) return { studentId: student.id, pos }
+      if (isMissingScore(scoreMap[`${t.questions[indices[pos]].id}-${student.id}`])) return { studentId: student.id, pos }
     }
   }
   return null
+}
+
+// ── Route changes during grading ─────────────────────────────────────────────
+// A student's route can change while a session is being graded. Questions of the new
+// route may then have been passed over or marked n.v.t. For a question that applies to
+// the student's current route, a score is missing when it has no points or is n.v.t.
+export function isMissingScore(sc) {
+  return !sc || sc.excluded || sc.points === null || sc.points === undefined
+}
+
+// Missing { qIdx, studentId } pairs, in test order and then stack order.
+export function findMissingScores(t, orderedStudents, scoreMap) {
+  const missing = []
+  t.questions.forEach((q, qIdx) => {
+    for (const s of orderedStudents) {
+      if (isApplicableForQuestion(s, q) && isMissingScore(scoreMap[`${q.id}-${s.id}`])) {
+        missing.push({ qIdx, studentId: s.id })
+      }
+    }
+  })
+  return missing
+}
+
+// Scores that still count although the question no longer applies to the student's route.
+export function findStaleScores(t, orderedStudents, scoreMap) {
+  const stale = []
+  for (const q of t.questions) {
+    for (const s of orderedStudents) {
+      const sc = scoreMap[`${q.id}-${s.id}`]
+      if (sc && !sc.excluded && !isApplicableForQuestion(s, q)) stale.push({ question: q, student: s, score: sc })
+    }
+  }
+  return stale
 }
 
 // ── Cijfer (1-10) grading ────────────────────────────────────────────────────
