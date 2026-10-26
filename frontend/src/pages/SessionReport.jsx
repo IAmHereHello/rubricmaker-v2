@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { useParams, useSearchParams, Link } from 'react-router-dom'
+import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
 import RouteBadge from '../components/RouteBadge.jsx'
 import { LEVEL_LABELS } from '../constants.js'
-import { displayCijfer, formatCijfer } from '../utils/gradingLogic.js'
+import { displayCijfer, formatCijfer, gradeLabel, computeGrade, isCijferGrade } from '../utils/gradingLogic.js'
 import { exportPDF } from '../utils/exportPDF.js'
 import { exportRubricsPDF, exportRubricsPerStudentPDF } from '../utils/exportRubric.js'
 import StudentRubric from '../components/StudentRubric.jsx'
@@ -44,7 +44,7 @@ function computeGoals(questions, scores, studentId) {
   }
 }
 
-function StudentView({ data, selectedId, setSelectedId, onExportRubric, isExportingRubric, grades }) {
+function StudentView({ data, selectedId, setSelectedId, onExportRubric, isExportingRubric, grades, onEdit }) {
   const student = data.students.find(s => s.id === selectedId)
 
   let totalScored = 0, totalMax = 0
@@ -95,6 +95,15 @@ function StudentView({ data, selectedId, setSelectedId, onExportRubric, isExport
             </strong>{' '}
             behaald
           </div>
+        )}
+        {student && (
+          <button
+            className="btn btn-secondary"
+            style={{ alignSelf: 'flex-end' }}
+            onClick={() => onEdit(student.id)}
+          >
+            Bewerken
+          </button>
         )}
         {student && (
           <button
@@ -155,8 +164,33 @@ function StudentView({ data, selectedId, setSelectedId, onExportRubric, isExport
   )
 }
 
+// Points and maximum over the graded, applicable questions of one student
+function studentTotals(data, studentId) {
+  let scored = 0, max = 0
+  data.questions.forEach(q => {
+    const sc = data.scores[`${studentId}|${q.id}`]
+    if (sc && !sc.excluded && sc.points !== null && sc.points !== undefined) {
+      scored += sc.points
+      max += q.max_score
+    }
+  })
+  return { scored, max, pct: max ? scored / max * 100 : null }
+}
+
+// One decimal with a comma; whole numbers without decimals
+const formatNumber = n => (Number.isInteger(Math.round(n * 10) / 10) ? String(Math.round(n)) : n.toFixed(1).replace('.', ','))
+
 function ClassView({ data }) {
   const colStyle = { textAlign: 'center', minWidth: 76, fontSize: 13 }
+
+  const totals = Object.fromEntries(data.students.map(s => [s.id, studentTotals(data, s.id)]))
+  // Class average over students with at least one graded question (inhalers without scores are left out)
+  const graded = data.students.map(s => totals[s.id]).filter(t => t.max > 0)
+  const classTotal = graded.length ? {
+    pct: graded.reduce((acc, t) => acc + t.pct, 0) / graded.length,
+    scored: graded.reduce((acc, t) => acc + t.scored, 0) / graded.length,
+    max: graded.reduce((acc, t) => acc + t.max, 0) / graded.length,
+  } : null
 
   const goalQuestions = data.questions.filter(q => q.learning_goal && q.learning_goal_threshold != null)
   const hasGoals = goalQuestions.length > 0
@@ -236,25 +270,214 @@ function ClassView({ data }) {
                   })}
                   <td style={{ ...colStyle, background: '#eef2f8', fontWeight: 600 }}>
                     {avg?.avg_points !== null && avg?.avg_points !== undefined
-                      ? `${avg.avg_points}/${q.max_score}`
+                      ? `${formatNumber(avg.avg_points)}/${q.max_score}`
                       : '—'}
                   </td>
                 </tr>
               )
             })}
           </tbody>
+          <tfoot>
+            <tr style={{ borderTop: '2px solid #c9d1de' }}>
+              <td style={{ fontWeight: 700 }}>Totaal per leerling</td>
+              {data.students.map(s => {
+                const t = totals[s.id]
+                return (
+                  <td key={s.id} style={{ ...colStyle, fontWeight: 600 }}>
+                    {t.max > 0 ? (
+                      <>
+                        <div>{t.scored}<span className="text-muted">/{t.max}</span></div>
+                        <div className="text-muted" style={{ fontSize: 12 }}>{Math.round(t.pct)}%</div>
+                      </>
+                    ) : '—'}
+                  </td>
+                )
+              })}
+              <td style={{ ...colStyle, background: '#dde5f2', fontWeight: 700 }}>
+                {classTotal ? (
+                  <>
+                    <div>{formatNumber(classTotal.scored)}<span className="text-muted">/{formatNumber(classTotal.max)}</span></div>
+                    <div style={{ fontSize: 12 }}>{Math.round(classTotal.pct)}%</div>
+                  </>
+                ) : '—'}
+              </td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </div>
   )
 }
 
+const GRADE_RANK = { expert: 3, beheerst: 2, in_ontwikkeling: 1 }
+const GRADE_SHORT = { expert: 'E', beheerst: 'B', in_ontwikkeling: 'IO' }
+const GRADE_COLORS = { expert: '#2e7d32', beheerst: '#1a6ecc', in_ontwikkeling: '#c07000' }
+const GRADE_BG = { expert: '#e8f5e9', beheerst: '#e8f0fc', in_ontwikkeling: '#fff3e0' }
+
+// Sortable list of every student's result for this test
+function ResultsView({ data, grades, onEdit }) {
+  const [sort, setSort] = useState({ key: 'order', dir: 1 })
+  const isCijferTest = data.test.grading_method === 'cijfer'
+  const hasCategories = data.test.grading_method === 'points' || data.test.grading_method === 'goals'
+
+  const rows = useMemo(() => {
+    // computeGrade uses `${question.id}-${student.id}` keys
+    const scoreMap = {}
+    for (const [key, sc] of Object.entries(data.scores)) {
+      if (!sc) continue
+      const [sid, qid] = key.split('|')
+      scoreMap[`${qid}-${sid}`] = sc
+    }
+    return data.students.map((s, i) => {
+      const t = studentTotals(data, s.id)
+      const g = grades[s.id]
+      const stars = g?.stars || 0
+      let result = null
+      if (t.max > 0) {
+        result = g?.grade ?? computeGrade(s, data.questions, scoreMap, data.test.grading_method, data.test.grade_config, stars)
+      }
+      const cijfer = t.max > 0 ? displayCijfer(data.test, t.scored, t.max, isCijferTest ? result : null, stars) : null
+      return { student: s, order: i, ...t, result, cijfer: cijfer != null ? Number(cijfer) : null, stars }
+    })
+  }, [data, grades, isCijferTest])
+
+  const resultValue = r => {
+    if (r.result == null) return null
+    if (isCijferGrade(r.result)) return Number(r.result)
+    return GRADE_RANK[r.result] ?? null
+  }
+
+  const sorted = useMemo(() => {
+    const value = {
+      order: r => r.order,
+      name: r => r.student.name,
+      points: r => (r.max ? r.scored : null),
+      pct: r => r.pct,
+      result: r => resultValue(r),
+      cijfer: r => r.cijfer,
+      stars: r => r.stars,
+    }[sort.key]
+    return [...rows].sort((a, b) => {
+      // Students without a result always go to the bottom
+      if (!a.max !== !b.max) return a.max ? -1 : 1
+      const va = value(a), vb = value(b)
+      if (va == null || vb == null) {
+        if (va == null && vb == null) return a.order - b.order
+        return va == null ? 1 : -1
+      }
+      const cmp = typeof va === 'string' ? va.localeCompare(vb, 'nl') : va - vb
+      if (cmp !== 0) return cmp * sort.dir
+      // Equal results: higher percentage first, then grading order
+      if (sort.key === 'result') return ((a.pct ?? 0) - (b.pct ?? 0)) * sort.dir
+      return a.order - b.order
+    })
+  }, [rows, sort])
+
+  function toggleSort(key) {
+    // Results and numbers start high to low; name and order start at the top
+    const firstDir = ['order', 'name'].includes(key) ? 1 : -1
+    setSort(s => (s.key === key ? { key, dir: -s.dir } : { key, dir: firstDir }))
+  }
+
+  const withResult = rows.filter(r => r.max > 0)
+  let summary = null
+  if (withResult.length) {
+    const avgPct = withResult.reduce((acc, r) => acc + r.pct, 0) / withResult.length
+    if (hasCategories) {
+      const counts = { expert: 0, beheerst: 0, in_ontwikkeling: 0 }
+      withResult.forEach(r => { if (r.result in counts) counts[r.result]++ })
+      summary = `${counts.expert} Expert · ${counts.beheerst} Beheerst · ${counts.in_ontwikkeling} In ontwikkeling · gem. ${Math.round(avgPct)}%`
+    } else {
+      const cijfers = withResult.map(r => r.cijfer).filter(c => c != null)
+      const avg = cijfers.reduce((acc, c) => acc + c, 0) / cijfers.length
+      const voldoende = cijfers.filter(c => c >= 5.5).length
+      summary = `Gem. cijfer ${formatNumber(avg)} · ${voldoende} van ${cijfers.length} voldoende (${Math.round(voldoende / cijfers.length * 100)}%) · gem. ${Math.round(avgPct)}%`
+    }
+  }
+
+  const header = (key, label, align = 'left') => (
+    <th
+      onClick={() => toggleSort(key)}
+      style={{ cursor: 'pointer', userSelect: 'none', textAlign: align, whiteSpace: 'nowrap' }}
+      title="Klik om te sorteren"
+    >
+      {label}
+      <span style={{ marginLeft: 4, opacity: sort.key === key ? 1 : 0.25 }}>
+        {sort.key === key && sort.dir === -1 ? '▼' : '▲'}
+      </span>
+    </th>
+  )
+
+  return (
+    <div className="card">
+      {summary && <div style={{ marginBottom: 14, fontSize: 14, fontWeight: 600 }}>{summary}</div>}
+      <table>
+        <thead>
+          <tr>
+            {header('order', '#')}
+            {header('name', 'Naam')}
+            <th>Route</th>
+            {header('points', 'Punten', 'right')}
+            {header('pct', '%', 'right')}
+            {data.test.grading_method && header('result', 'Resultaat', 'center')}
+            {!isCijferTest && header('cijfer', 'Cijfer', 'center')}
+            {isCijferTest && header('stars', 'Sterretjes', 'center')}
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map(r => (
+            <tr
+              key={r.student.id}
+              onClick={() => onEdit(r.student.id)}
+              style={{ cursor: 'pointer' }}
+              title="Klik om dit resultaat te bewerken"
+            >
+              <td style={{ color: '#888' }}>{r.order + 1}</td>
+              <td style={{ fontWeight: 600 }}>{r.student.name}</td>
+              <td><RouteBadge route={r.student.route} /></td>
+              {r.max > 0 ? (
+                <>
+                  <td style={{ textAlign: 'right' }}>{r.scored}<span className="text-muted">/{r.max}</span></td>
+                  <td style={{ textAlign: 'right' }}>{Math.round(r.pct)}%</td>
+                  {data.test.grading_method && (
+                    <td style={{ textAlign: 'center' }}>
+                      {r.result == null ? <span className="text-muted">—</span> : isCijferGrade(r.result) ? (
+                        <strong>{formatCijfer(r.result)}</strong>
+                      ) : (
+                        <span style={{
+                          fontSize: 12, fontWeight: 700, borderRadius: 4, padding: '2px 8px',
+                          background: GRADE_BG[r.result], color: GRADE_COLORS[r.result],
+                        }} title={gradeLabel(r.result)}>
+                          {GRADE_SHORT[r.result] ?? gradeLabel(r.result)}
+                        </span>
+                      )}
+                    </td>
+                  )}
+                  {!isCijferTest && <td style={{ textAlign: 'center' }}>{r.cijfer != null ? formatCijfer(r.cijfer) : '—'}</td>}
+                  {isCijferTest && (
+                    <td style={{ textAlign: 'center', color: '#c07000' }}>{r.stars > 0 ? '★'.repeat(Math.min(r.stars, 8)) : ''}</td>
+                  )}
+                </>
+              ) : (
+                <td colSpan={2 + (data.test.grading_method ? 1 : 0) + 1} className="text-muted" style={{ fontStyle: 'italic' }}>
+                  geen resultaat
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 export default function SessionReport() {
   const { id } = useParams()
-  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
-  const [view, setView] = useState('student')
+  const [view, setViewState] = useState(searchParams.get('view') || 'student')
   const [selectedStudentId, setSelectedStudentId] = useState(null)
   const [exporting, setExporting] = useState(false)
   const [grades, setGrades] = useState([])
@@ -264,6 +487,27 @@ export default function SessionReport() {
   const [showCijfer, setShowCijfer] = useState(false)
   const reportRef = useRef(null)
   const rubricRefs = useRef({})
+
+  // Keep the open tab and student in the URL so returning from Bewerken lands on the same spot
+  function updateParams(changes) {
+    const next = new URLSearchParams(searchParams)
+    for (const [k, v] of Object.entries(changes)) next.set(k, String(v))
+    setSearchParams(next, { replace: true })
+  }
+
+  function setView(v) {
+    setViewState(v)
+    updateParams({ view: v })
+  }
+
+  function selectStudent(sid) {
+    setSelectedStudentId(sid)
+    updateParams({ student: sid })
+  }
+
+  function handleEdit(studentId) {
+    navigate(`/sessions/${id}/edit/${studentId}`)
+  }
 
   useEffect(() => {
     api.getSessionReport(id)
@@ -398,6 +642,12 @@ export default function SessionReport() {
         >
           Klassenoverzicht
         </button>
+        <button
+          className={`btn ${view === 'results' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setView('results')}
+        >
+          Resultaten
+        </button>
       </div>
 
       <div ref={reportRef}>
@@ -407,11 +657,14 @@ export default function SessionReport() {
           <StudentView
             data={data}
             selectedId={selectedStudentId}
-            setSelectedId={setSelectedStudentId}
+            setSelectedId={selectStudent}
             onExportRubric={handleExportRubric}
             grades={gradeMap}
             isExportingRubric={isExportingRubric}
+            onEdit={handleEdit}
           />
+        ) : view === 'results' ? (
+          <ResultsView data={data} grades={gradeMap} onEdit={handleEdit} />
         ) : (
           <ClassView data={data} />
         )}

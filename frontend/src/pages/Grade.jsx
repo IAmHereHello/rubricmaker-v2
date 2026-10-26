@@ -396,7 +396,7 @@ export default function Grade() {
       const target = fresh.find(s => s.id === targetId)
       const targetMissing = missing.filter(m => m.studentId === targetId)
       targetMissing.forEach(m => revisitedRef.current.add(`${m.qIdx}-${m.studentId}`))
-      setSkipNotice(`${target.name} heeft nog ${questionList(targetMissing.map(m => m.qIdx))} open (route gewijzigd?). Die komen nu eerst.`)
+      setSkipNotice(`${target.name} heeft nog ${questionList(targetMissing.map(m => m.qIdx))} open (route gewijzigd?). ${targetMissing.length === 1 ? 'Die komt' : 'Die komen'} nu eerst.`)
       setVStudentId(targetId)
       setVPos(getApplicableQuestionIndices(test, target).indexOf(targetMissing[0].qIdx))
       return

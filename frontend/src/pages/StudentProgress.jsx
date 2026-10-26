@@ -177,6 +177,7 @@ export default function StudentProgress() {
                 <th>Totaal</th>
                 <th>Beoordeling</th>
                 <th>Per domein</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -207,6 +208,14 @@ export default function StudentProgress() {
                         <strong>{dom}</strong>: {v.scored}/{v.max}
                       </span>
                     ))}
+                  </td>
+                  <td>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={e => { e.stopPropagation(); navigate(`/sessions/${sess.session_id}/edit/${id}`) }}
+                    >
+                      Bewerken
+                    </button>
                   </td>
                 </tr>
               ))}

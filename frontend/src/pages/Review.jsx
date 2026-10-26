@@ -5,7 +5,7 @@ import RouteBadge from '../components/RouteBadge.jsx'
 import CijferInput from '../components/CijferInput.jsx'
 import StarInput from '../components/StarInput.jsx'
 import { pyramidLabel } from '../constants.js'
-import { displayCijfer, formatCijfer, calcCijfer, shiftCijfer, formatCijferFormula, gradeLabel } from '../utils/gradingLogic.js'
+import { displayCijfer, formatCijfer, calcCijfer, shiftCijfer, formatCijferFormula, gradeLabel, computeGrade } from '../utils/gradingLogic.js'
 
 const GRADE_OPTIONS = [
   { value: 'expert',         label: 'Expert' },
@@ -15,62 +15,6 @@ const GRADE_OPTIONS = [
 const GRADE_COLORS = { expert: '#2e7d32', beheerst: '#1a6ecc', in_ontwikkeling: '#c07000' }
 const GRADE_BG    = { expert: '#e8f5e9', beheerst: '#e8f0fc', in_ontwikkeling: '#fff3e0' }
 
-// ── Grade computation ─────────────────────────────────────────────────────────
-
-function computeGrade(student, questions, scoreMap, gradingMethod, gradeConfig, stars = 0) {
-  if (!gradingMethod || !gradeConfig) return null
-  const applicable = questions.filter(q => (q.routes || []).includes(student.route))
-
-  if (gradingMethod === 'cijfer') {
-    let scored = 0, maxPts = 0
-    for (const q of applicable) {
-      const sc = scoreMap[`${q.id}-${student.id}`]
-      if (sc && !sc.excluded && sc.points !== null) { scored += sc.points; maxPts += q.max_score }
-    }
-    return calcCijfer(scored, maxPts, gradeConfig, stars)
-  }
-
-  const routeCfg = gradeConfig[student.route]
-  if (!routeCfg) return null
-
-  if (gradingMethod === 'points') {
-    let scored = 0, maxPts = 0
-    for (const q of applicable) {
-      const sc = scoreMap[`${q.id}-${student.id}`]
-      if (sc && !sc.excluded && sc.points !== null) {
-        scored += sc.points
-        maxPts += q.max_score
-      }
-    }
-    if (maxPts === 0) return null
-    const pct = (scored / maxPts) * 100
-    if (pct >= routeCfg.expert)   return 'expert'
-    if (pct >= routeCfg.beheerst) return 'beheerst'
-    return 'in_ontwikkeling'
-  }
-
-  if (gradingMethod === 'goals') {
-    const goalGroups = {}
-    for (const q of applicable) {
-      if (!q.learning_goal || q.learning_goal_threshold == null) continue
-      if (!goalGroups[q.learning_goal]) goalGroups[q.learning_goal] = []
-      goalGroups[q.learning_goal].push(q)
-    }
-    let achieved = 0
-    for (const goalQs of Object.values(goalGroups)) {
-      const allMet = goalQs.every(q => {
-        const sc = scoreMap[`${q.id}-${student.id}`]
-        return sc && !sc.excluded && sc.points !== null && sc.points >= q.learning_goal_threshold
-      })
-      if (allMet) achieved++
-    }
-    if (achieved >= routeCfg.expert)   return 'expert'
-    if (achieved >= routeCfg.beheerst) return 'beheerst'
-    return 'in_ontwikkeling'
-  }
-
-  return null
-}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
