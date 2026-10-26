@@ -11,6 +11,8 @@ import {
   formatCijferFormula,
   getApplicableQuestionIndices,
   findVerticalResume,
+  findMissingScores,
+  findStaleScores,
 } from '../utils/gradingLogic.js'
 
 export default function Grade() {
@@ -31,6 +33,13 @@ export default function Grade() {
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
   const [skipNotice, setSkipNotice] = useState('')
+  // Up-to-date copy of `scores` for async handlers that read right after saving
+  const scoresRef = useRef({})
+  // Horizontal mode: missed { qIdx, studentId } pairs to catch up on at the end
+  const [fixQueue, setFixQueue] = useState(null)
+  const [fixPos, setFixPos] = useState(0)
+  // Vertical mode: missed questions already sent back to once (not again if left empty)
+  const revisitedRef = useRef(new Set())
   const scoreInputRef = useRef(null)
   const commentInputRef = useRef(null)
 
@@ -71,6 +80,7 @@ export default function Grade() {
         setSession(sess)
         setTest(t)
         setStudents(sortedStuds)
+        scoresRef.current = scoreMap
         setScores(scoreMap)
 
         if (sess.grading_mode === 'vertical') {
@@ -88,7 +98,9 @@ export default function Grade() {
           const orderedStuds = getOrderedStudents(sess, sortedStuds)
           const [rqIdx, rsIdx] = findResumePosition(t, orderedStuds, scoreMap)
           if (rqIdx >= t.questions.length) {
-            setDone(true)
+            const missing = findMissingScores(t, orderedStuds, scoreMap)
+            if (missing.length) setFixQueue(missing)
+            else setDone(true)
           } else {
             setQIdx(rqIdx)
             setSIdx(rsIdx)
@@ -111,16 +123,21 @@ export default function Grade() {
   const vStudent = useMemo(() => students.find(s => s.id === vStudentId) ?? null, [students, vStudentId])
   const vQIndices = useMemo(() => getApplicableQuestionIndices(test, vStudent), [test, vStudent])
 
-  const currentQuestion = isVertical ? test?.questions[vQIndices[vPos]] : test?.questions[qIdx]
+  const fixItem = fixQueue ? fixQueue[fixPos] : null
+  const currentQuestion = fixItem
+    ? test?.questions[fixItem.qIdx]
+    : isVertical ? test?.questions[vQIndices[vPos]] : test?.questions[qIdx]
   // Index of the open question within the whole test (qIdx in horizontal mode)
-  const curQIdx = isVertical ? (vQIndices[vPos] ?? 0) : qIdx
+  const curQIdx = fixItem ? fixItem.qIdx : isVertical ? (vQIndices[vPos] ?? 0) : qIdx
 
   const applicableStudents = useMemo(() => {
     if (!currentQuestion) return []
     return orderedStudents.filter(s => (currentQuestion.routes || []).includes(s.route))
   }, [orderedStudents, currentQuestion])
 
-  const currentStudent = isVertical ? vStudent : applicableStudents[sIdx]
+  const currentStudent = fixItem
+    ? students.find(s => s.id === fixItem.studentId)
+    : isVertical ? vStudent : applicableStudents[sIdx]
 
   const scoreKey = (qid, sid) => `${qid}-${sid}`
 
@@ -252,6 +269,55 @@ export default function Grade() {
   }, [q1Mode, q1AvailableStudents])
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
+  function putScore(key, saved) {
+    scoresRef.current = { ...scoresRef.current, [key]: saved }
+    setScores(scoresRef.current)
+  }
+
+  // Routes can be changed on the Leerlingen page while grading; reload them at each checkpoint.
+  async function refreshStudents() {
+    try {
+      const fresh = (await api.getStudents(session.class_name)).sort((a, b) => a.name.localeCompare(b.name, 'nl'))
+      setStudents(fresh)
+      return fresh
+    } catch {
+      return students
+    }
+  }
+
+  // After a route change: mark scores of questions outside the new route as n.v.t. (the
+  // points are kept) and return the questions of the new route that still need a score.
+  async function checkRouteChanges(stack) {
+    for (const { question, student, score } of findStaleScores(test, stack, scoresRef.current)) {
+      const saved = await api.upsertScore({
+        session_id: parseInt(id),
+        student_id: student.id,
+        question_id: question.id,
+        points: score.points,
+        excluded: true,
+        comment: score.comment ?? null,
+      })
+      putScore(scoreKey(question.id, student.id), saved)
+    }
+    return findMissingScores(test, stack, scoresRef.current)
+  }
+
+  // Horizontal mode reached the last question: catch up on missed questions before finishing.
+  async function finishHorizontal(order) {
+    const fresh = await refreshStudents()
+    const missing = await checkRouteChanges(getOrderedStudents({ student_order: order }, fresh))
+    if (missing.length) {
+      setFixPos(0)
+      setFixQueue(missing)
+    } else {
+      setDone(true)
+    }
+  }
+
+  function questionList(qIdxs) {
+    const nrs = [...new Set(qIdxs)].sort((a, b) => a - b).map(i => i + 1)
+    return nrs.length === 1 ? `vraag ${nrs[0]}` : `vragen ${nrs.slice(0, -1).join(', ')} en ${nrs[nrs.length - 1]}`
+  }
   async function persistScore() {
     if (!currentQuestion || !currentStudent || inputVal === '') return
     const points = parseInt(inputVal, 10)
@@ -267,7 +333,7 @@ export default function Grade() {
         excluded: false,
         comment: commentVal.trim() || null,
       })
-      setScores(prev => ({ ...prev, [scoreKey(currentQuestion.id, currentStudent.id)]: saved }))
+      putScore(scoreKey(currentQuestion.id, currentStudent.id), saved)
     } finally {
       setSaving(false)
     }
@@ -281,7 +347,7 @@ export default function Grade() {
     const excluded = allStudents.filter(s => !isApplicableForQuestion(s, question))
     for (const s of excluded) {
       const key = scoreKey(question.id, s.id)
-      if (!scores[key]) {
+      if (!scoresRef.current[key]) {
         const saved = await api.upsertScore({
           session_id: parseInt(id),
           student_id: s.id,
@@ -289,7 +355,7 @@ export default function Grade() {
           points: null,
           excluded: true,
         })
-        setScores(prev => ({ ...prev, [key]: saved }))
+        putScore(key, saved)
       }
     }
   }
@@ -298,7 +364,7 @@ export default function Grade() {
     for (const q of test.questions) {
       if (isApplicableForQuestion(student, q)) continue
       const key = scoreKey(q.id, student.id)
-      if (!scores[key]) {
+      if (!scoresRef.current[key]) {
         const saved = await api.upsertScore({
           session_id: parseInt(id),
           student_id: student.id,
@@ -306,7 +372,7 @@ export default function Grade() {
           points: null,
           excluded: true,
         })
-        setScores(prev => ({ ...prev, [key]: saved }))
+        putScore(key, saved)
       }
     }
   }
@@ -319,7 +385,22 @@ export default function Grade() {
   }
 
   async function finishVStudent(student, order) {
-    await createExcludedForStudent(student)
+    const fresh = await refreshStudents()
+    const stack = order.map(sid => fresh.find(s => s.id === sid)).filter(Boolean)
+    await createExcludedForStudent(fresh.find(s => s.id === student.id) ?? student)
+    const missing = (await checkRouteChanges(stack))
+      .filter(m => !revisitedRef.current.has(`${m.qIdx}-${m.studentId}`))
+    if (missing.length) {
+      // Go back to the missed questions (this student's first) before the next student
+      const targetId = missing.some(m => m.studentId === student.id) ? student.id : missing[0].studentId
+      const target = fresh.find(s => s.id === targetId)
+      const targetMissing = missing.filter(m => m.studentId === targetId)
+      targetMissing.forEach(m => revisitedRef.current.add(`${m.qIdx}-${m.studentId}`))
+      setSkipNotice(`${target.name} heeft nog ${questionList(targetMissing.map(m => m.qIdx))} open (route gewijzigd?). ${targetMissing.length === 1 ? 'Die komt' : 'Die komen'} nu eerst.`)
+      setVStudentId(targetId)
+      setVPos(getApplicableQuestionIndices(test, target).indexOf(targetMissing[0].qIdx))
+      return
+    }
     setVStudentId(null)
     setVPos(0)
     if (order.length >= students.length) await closeStack(order)
@@ -329,7 +410,8 @@ export default function Grade() {
     if (vBusy || !vSelectedStudent) return
     setVBusy(true)
     try {
-      const student = vSelectedStudent
+      const fresh = await refreshStudents()
+      const student = fresh.find(s => s.id === vSelectedStudent.id) ?? vSelectedStudent
       const newOrder = [...(session.student_order || []), student.id]
       const updated = await api.setSessionOrder(id, { student_order: newOrder })
       setSession(updated)
@@ -368,7 +450,7 @@ export default function Grade() {
       points,
       excluded: false,
     })
-    setScores(prev => ({ ...prev, [scoreKey(test.questions[0].id, q1SelectedStudent.id)]: saved }))
+    putScore(scoreKey(test.questions[0].id, q1SelectedStudent.id), saved)
 
     const newOrder = [...(session.student_order || []), q1SelectedStudent.id]
     const updated = await api.setSessionOrder(id, { student_order: newOrder })
@@ -397,7 +479,7 @@ export default function Grade() {
       points: null,
       excluded: true,
     })
-    setScores(prev => ({ ...prev, [scoreKey(test.questions[0].id, q1SelectedStudent.id)]: saved }))
+    putScore(scoreKey(test.questions[0].id, q1SelectedStudent.id), saved)
 
     const newOrder = [...(session.student_order || []), q1SelectedStudent.id]
     const updated = await api.setSessionOrder(id, { student_order: newOrder })
@@ -425,7 +507,7 @@ export default function Grade() {
     setQ1Mode(false)
 
     if (test.questions.length <= 1) {
-      setDone(true)
+      await finishHorizontal(newStudentOrder)
       return
     }
 
@@ -453,7 +535,7 @@ export default function Grade() {
     }
 
     if (startQIdx >= test.questions.length) {
-      setDone(true)
+      await finishHorizontal(newStudentOrder)
       return
     }
 
@@ -483,7 +565,7 @@ export default function Grade() {
         points: pts,
         excluded: false,
       })
-      setScores(prev => ({ ...prev, [scoreKey(q1.id, item.id)]: saved }))
+      putScore(scoreKey(q1.id, item.id), saved)
     }
     setQ1EditingItemId(null)
   }
@@ -491,6 +573,10 @@ export default function Grade() {
   // ── Regular navigation ───────────────────────────────────────────────────────
   async function handlePrev() {
     await persistScore()
+    if (fixQueue) {
+      if (fixPos > 0) setFixPos(p => p - 1)
+      return
+    }
     if (isVertical) {
       if (vPos > 0) setVPos(p => p - 1)
       return
@@ -512,6 +598,10 @@ export default function Grade() {
 
   async function handleNext() {
     await persistScore()
+    if (fixQueue) {
+      if (fixPos < fixQueue.length - 1) setFixPos(p => p + 1)
+      return
+    }
     if (isVertical) {
       if (vPos < vQIndices.length - 1) setVPos(p => p + 1)
       return
@@ -521,10 +611,17 @@ export default function Grade() {
 
   async function handleNextQuestion() {
     await persistScore()
+    if (fixQueue) {
+      setFixQueue(null)
+      setDone(true)
+      return
+    }
     if (isVertical) {
       await finishVStudent(vStudent, session.student_order || [])
       return
     }
+    const fresh = await refreshStudents()
+    const orderedStudents = getOrderedStudents(session, fresh)
     await createExcludedScores(currentQuestion, orderedStudents)
 
     let nextQIdx = qIdx + 1
@@ -554,7 +651,7 @@ export default function Grade() {
     }
 
     if (nextQIdx >= test.questions.length) {
-      setDone(true)
+      await finishHorizontal(session.student_order || [])
       return
     }
     setQIdx(nextQIdx)
@@ -582,8 +679,10 @@ export default function Grade() {
 
   // ── Render ───────────────────────────────────────────────────────────────────
   // Vertical: "last" means the student's last applicable question
-  const isLastStudent = isVertical ? vPos === vQIndices.length - 1 : sIdx === applicableStudents.length - 1
-  const isLastQuestion = isVertical ? false : qIdx === test?.questions.length - 1
+  const isLastStudent = fixQueue
+    ? fixPos === fixQueue.length - 1
+    : isVertical ? vPos === vQIndices.length - 1 : sIdx === applicableStudents.length - 1
+  const isLastQuestion = fixQueue ? true : isVertical ? false : qIdx === test?.questions.length - 1
 
   if (!test || !session) return <div className="page"><p>Laden...</p></div>
 
@@ -952,12 +1051,20 @@ export default function Grade() {
         </div>
       )}
 
+      {fixQueue && (
+        <div className="alert" style={{ background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 6, padding: '10px 14px', marginBottom: 12, color: '#856404' }}>
+          Nog {fixQueue.length === 1 ? '1 vraag' : `${fixQueue.length} vragen`} open, bijvoorbeeld omdat een route is gewijzigd. Kijk deze eerst na.
+        </div>
+      )}
+
       <div style={{ background: '#e0e3ea', borderRadius: 6, height: 6, marginBottom: 20 }}>
         <div style={{
           background: '#1e3a5f',
           borderRadius: 6,
           height: 6,
-          width: isVertical
+          width: fixQueue
+            ? `${((fixPos + 1) / fixQueue.length) * 100}%`
+            : isVertical
             ? `${(((session.student_order?.length || 1) - 1 + (vPos + 1) / Math.max(vQIndices.length, 1)) / Math.max(students.length, 1)) * 100}%`
             : `${((qIdx * applicableStudents.length + sIdx + 1) / (test.questions.length * Math.max(applicableStudents.length, 1))) * 100}%`,
           transition: 'width .3s',
@@ -970,7 +1077,9 @@ export default function Grade() {
           <div style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
             <RouteBadge route={currentStudent.route} />
             <span className="grade-progress">
-              {isVertical
+              {fixQueue
+                ? `Inhalen: ${fixPos + 1} van ${fixQueue.length} — Vraag ${curQIdx + 1}`
+                : isVertical
                 ? `Vraag ${curQIdx + 1} van ${test.questions.length} — Leerling ${(session.student_order || []).indexOf(currentStudent.id) + 1} van ${students.length}`
                 : `Vraag ${qIdx + 1} van ${test.questions.length} — Leerling ${sIdx + 1} van ${applicableStudents.length}`}
             </span>
@@ -1042,14 +1151,14 @@ export default function Grade() {
             <button
               className="btn btn-secondary"
               onClick={handlePrev}
-              disabled={isVertical ? vPos === 0 : sIdx === 0 && qIdx === 0}
+              disabled={fixQueue ? fixPos === 0 : isVertical ? vPos === 0 : sIdx === 0 && qIdx === 0}
             >
-              {isVertical ? '← Vorige vraag' : '← Vorige leerling'}
+              {fixQueue ? '← Vorige' : isVertical ? '← Vorige vraag' : '← Vorige leerling'}
             </button>
 
             {!isLastStudent && (
               <button className="btn btn-primary" onClick={handleNext}>
-                {isVertical ? 'Volgende vraag →' : 'Volgende leerling →'}
+                {fixQueue ? 'Volgende →' : isVertical ? 'Volgende vraag →' : 'Volgende leerling →'}
               </button>
             )}
 

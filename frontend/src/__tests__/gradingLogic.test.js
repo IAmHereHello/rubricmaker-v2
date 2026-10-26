@@ -9,6 +9,8 @@ import {
   gradeLabel,
   getApplicableQuestionIndices,
   findVerticalResume,
+  findMissingScores,
+  findStaleScores,
 } from '../utils/gradingLogic.js'
 
 const orangeQ1 = { id: 1, routes: ['oranje'], max_score: 10 }
@@ -113,9 +115,44 @@ describe('vertical grading', () => {
     expect(findVerticalResume(t, [A, B], scores)).toEqual({ studentId: 11, pos: 0 })
   })
 
-  test('excluded scores count as done, 0 points counts as graded', () => {
-    const scores = { '1-11': { points: 0 }, '3-11': { points: null, excluded: true } }
+  test('0 points counts as graded', () => {
+    const scores = { '1-11': { points: 0 }, '3-11': { points: 2 } }
     expect(findVerticalResume(t, [B], scores)).toBeNull()
+  })
+
+  test('an n.v.t. score on a question of the current route counts as missing (route changed)', () => {
+    const scores = { '1-11': { points: 0 }, '3-11': { points: null, excluded: true } }
+    expect(findVerticalResume(t, [B], scores)).toEqual({ studentId: 11, pos: 1 })
+  })
+})
+
+describe('route changed during grading', () => {
+  const t = {
+    questions: [
+      { id: 1, routes: ['oranje', 'geel'] },
+      { id: 2, routes: ['oranje'] },
+      { id: 3, routes: ['geel'] },
+    ],
+  }
+  // Was geel while questions 1-3 were graded, now oranje
+  const A = { id: 10, route: 'oranje' }
+  const B = { id: 11, route: 'geel' }
+  const scores = {
+    '1-10': { points: 2 }, '2-10': { points: null, excluded: true }, '3-10': { points: 1 },
+    '1-11': { points: 1 }, '2-11': { points: null, excluded: true }, '3-11': { points: 3 },
+  }
+
+  test('questions of the new route are missing', () => {
+    expect(findMissingScores(t, [A, B], scores)).toEqual([{ qIdx: 1, studentId: 10 }])
+  })
+
+  test('scores of the old route are stale', () => {
+    const stale = findStaleScores(t, [A, B], scores)
+    expect(stale.map(x => [x.question.id, x.student.id])).toEqual([[3, 10]])
+  })
+
+  test('nothing is missing when every applicable question has points', () => {
+    expect(findMissingScores(t, [B], scores)).toEqual([])
   })
 
   test('empty stack has nothing to resume', () => {

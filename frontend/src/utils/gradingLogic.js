@@ -57,11 +57,43 @@ export function findVerticalResume(t, orderedStudents, scoreMap) {
   for (const student of orderedStudents) {
     const indices = getApplicableQuestionIndices(t, student)
     for (let pos = 0; pos < indices.length; pos++) {
-      const sc = scoreMap[`${t.questions[indices[pos]].id}-${student.id}`]
-      if (!sc || (sc.points === null && !sc.excluded)) return { studentId: student.id, pos }
+      if (isMissingScore(scoreMap[`${t.questions[indices[pos]].id}-${student.id}`])) return { studentId: student.id, pos }
     }
   }
   return null
+}
+
+// ── Route changes during grading ─────────────────────────────────────────────
+// A student's route can change while a session is being graded. Questions of the new
+// route may then have been passed over or marked n.v.t. For a question that applies to
+// the student's current route, a score is missing when it has no points or is n.v.t.
+export function isMissingScore(sc) {
+  return !sc || sc.excluded || sc.points === null || sc.points === undefined
+}
+
+// Missing { qIdx, studentId } pairs, in test order and then stack order.
+export function findMissingScores(t, orderedStudents, scoreMap) {
+  const missing = []
+  t.questions.forEach((q, qIdx) => {
+    for (const s of orderedStudents) {
+      if (isApplicableForQuestion(s, q) && isMissingScore(scoreMap[`${q.id}-${s.id}`])) {
+        missing.push({ qIdx, studentId: s.id })
+      }
+    }
+  })
+  return missing
+}
+
+// Scores that still count although the question no longer applies to the student's route.
+export function findStaleScores(t, orderedStudents, scoreMap) {
+  const stale = []
+  for (const q of t.questions) {
+    for (const s of orderedStudents) {
+      const sc = scoreMap[`${q.id}-${s.id}`]
+      if (sc && !sc.excluded && !isApplicableForQuestion(s, q)) stale.push({ question: q, student: s, score: sc })
+    }
+  }
+  return stale
 }
 
 // ── Cijfer (1-10) grading ────────────────────────────────────────────────────
@@ -126,4 +158,60 @@ export function displayCijfer(test, scored, max, storedGrade, stars = 0) {
   const isCijferTest = test?.grading_method === 'cijfer'
   if (isCijferTest && isCijferGrade(storedGrade)) return Number(storedGrade).toFixed(1)
   return calcCijfer(scored, max, isCijferTest ? test.grade_config : null, isCijferTest ? stars : 0)
+}
+
+// Result for one student from their scores. scoreMap is keyed `${question.id}-${student.id}`.
+export function computeGrade(student, questions, scoreMap, gradingMethod, gradeConfig, stars = 0) {
+  if (!gradingMethod || !gradeConfig) return null
+  const applicable = questions.filter(q => (q.routes || []).includes(student.route))
+
+  if (gradingMethod === 'cijfer') {
+    let scored = 0, maxPts = 0
+    for (const q of applicable) {
+      const sc = scoreMap[`${q.id}-${student.id}`]
+      if (sc && !sc.excluded && sc.points !== null) { scored += sc.points; maxPts += q.max_score }
+    }
+    return calcCijfer(scored, maxPts, gradeConfig, stars)
+  }
+
+  const routeCfg = gradeConfig[student.route]
+  if (!routeCfg) return null
+
+  if (gradingMethod === 'points') {
+    let scored = 0, maxPts = 0
+    for (const q of applicable) {
+      const sc = scoreMap[`${q.id}-${student.id}`]
+      if (sc && !sc.excluded && sc.points !== null) {
+        scored += sc.points
+        maxPts += q.max_score
+      }
+    }
+    if (maxPts === 0) return null
+    const pct = (scored / maxPts) * 100
+    if (pct >= routeCfg.expert)   return 'expert'
+    if (pct >= routeCfg.beheerst) return 'beheerst'
+    return 'in_ontwikkeling'
+  }
+
+  if (gradingMethod === 'goals') {
+    const goalGroups = {}
+    for (const q of applicable) {
+      if (!q.learning_goal || q.learning_goal_threshold == null) continue
+      if (!goalGroups[q.learning_goal]) goalGroups[q.learning_goal] = []
+      goalGroups[q.learning_goal].push(q)
+    }
+    let achieved = 0
+    for (const goalQs of Object.values(goalGroups)) {
+      const allMet = goalQs.every(q => {
+        const sc = scoreMap[`${q.id}-${student.id}`]
+        return sc && !sc.excluded && sc.points !== null && sc.points >= q.learning_goal_threshold
+      })
+      if (allMet) achieved++
+    }
+    if (achieved >= routeCfg.expert)   return 'expert'
+    if (achieved >= routeCfg.beheerst) return 'beheerst'
+    return 'in_ontwikkeling'
+  }
+
+  return null
 }
