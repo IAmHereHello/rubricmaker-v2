@@ -11,6 +11,7 @@ import {
   findVerticalResume,
   findMissingScores,
   findStaleScores,
+  learningGoalResults,
 } from '../utils/gradingLogic.js'
 
 const orangeQ1 = { id: 1, routes: ['oranje'], max_score: 10 }
@@ -157,5 +158,36 @@ describe('route changed during grading', () => {
 
   test('empty stack has nothing to resume', () => {
     expect(findVerticalResume(t, [], {})).toBeNull()
+  })
+})
+
+describe('learningGoalResults', () => {
+  const qs = [
+    { id: 1, learning_goal: 'LD1', learning_goal_threshold: 2, max_score: 3 },
+    { id: 2, learning_goal: null, learning_goal_threshold: null, max_score: 2 },
+    { id: 3, learning_goal: 'LD1', learning_goal_threshold: 1, max_score: 2 },
+    { id: 4, learning_goal: 'LD2', learning_goal_threshold: 2, max_score: 4 },
+    { id: 5, learning_goal: 'LD2', learning_goal_threshold: 2, max_score: 4 },
+  ]
+
+  test('goal achieved only when every question meets its threshold', () => {
+    const scores = {
+      '7|1': { points: 2 }, '7|3': { points: 1 },
+      '7|4': { points: 3 }, '7|5': { points: 1 },
+    }
+    const res = learningGoalResults(qs, scores, 7)
+    expect(res.map(g => g.name)).toEqual(['LD1', 'LD2'])
+    expect(res[0].achieved).toBe(true)
+    expect(res[1].achieved).toBe(false)
+    expect(res[1].items.map(it => it.passed)).toEqual([true, false])
+  })
+
+  test('skips excluded questions and treats missing scores as not passed', () => {
+    const scores = { '7|1': { points: 3 }, '7|3': { excluded: true }, '7|4': { points: null } }
+    const res = learningGoalResults(qs, scores, 7)
+    expect(res[0].items).toHaveLength(1)
+    expect(res[0].achieved).toBe(true)
+    expect(res[1].items[0].points).toBeNull()
+    expect(res[1].achieved).toBe(false)
   })
 })

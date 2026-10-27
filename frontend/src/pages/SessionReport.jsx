@@ -3,10 +3,11 @@ import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
 import RouteBadge from '../components/RouteBadge.jsx'
 import { LEVEL_LABELS } from '../constants.js'
-import { displayCijfer, formatCijfer, gradeLabel, computeGrade, isCijferGrade } from '../utils/gradingLogic.js'
+import { displayCijfer, formatCijfer, gradeLabel, computeGrade, isCijferGrade, learningGoalResults } from '../utils/gradingLogic.js'
 import { exportPDF } from '../utils/exportPDF.js'
 import { exportRubricsPDF, exportRubricsPerStudentPDF } from '../utils/exportRubric.js'
 import StudentRubric from '../components/StudentRubric.jsx'
+import { GoalRequirement, GoalSummary } from '../components/LearningGoals.jsx'
 
 function ScoreCell({ sc, maxScore }) {
   if (!sc) return <span className="text-muted">—</span>
@@ -121,28 +122,22 @@ function StudentView({ data, selectedId, setSelectedId, onExportRubric, isExport
         <table>
           <thead>
             <tr>
-              <th style={{ width: 36 }}>#</th>
-              <th>Vraag</th>
+              <th>Opgave</th>
               <th>Domein</th>
               <th>Niveau</th>
               <th style={{ textAlign: 'center', width: 90 }}>Score / Max</th>
             </tr>
           </thead>
           <tbody>
-            {data.questions.map((q, i) => {
+            {data.questions.map(q => {
               const sc = data.scores[`${student.id}|${q.id}`]
               const isGoal = !!q.learning_goal && q.learning_goal_threshold != null
               const achieved = isGoal && sc && !sc.excluded && sc.points !== null && sc.points >= q.learning_goal_threshold
               return (
-                <tr key={q.id}>
-                  <td style={{ color: '#888' }}>{i + 1}</td>
+                <tr key={q.id} style={{ verticalAlign: 'top' }}>
                   <td>
-                    {q.description}
-                    {isGoal && (
-                      <span style={{ marginLeft: 6, fontSize: 11, background: '#e8f0fc', color: '#1a6ecc', borderRadius: 3, padding: '1px 5px' }}>
-                        {q.learning_goal} ≥{q.learning_goal_threshold}
-                      </span>
-                    )}
+                    <div style={{ fontWeight: 500 }}>{q.description}</div>
+                    {!sc?.excluded && <GoalRequirement question={q} fontSize={12} />}
                   </td>
                   <td>{q.domain || '—'}</td>
                   <td>
@@ -159,6 +154,12 @@ function StudentView({ data, selectedId, setSelectedId, onExportRubric, isExport
             })}
           </tbody>
         </table>
+      )}
+
+      {student && (
+        <div style={{ marginTop: 20 }}>
+          <GoalSummary goals={learningGoalResults(data.questions, data.scores, student.id)} fontSize={13} />
+        </div>
       )}
     </div>
   )
@@ -483,7 +484,6 @@ export default function SessionReport() {
   const [grades, setGrades] = useState([])
   const [exportTarget, setExportTarget] = useState(null)
   const [isExportingRubric, setIsExportingRubric] = useState(false)
-  const [showClassAverage, setShowClassAverage] = useState(true)
   const [showCijfer, setShowCijfer] = useState(false)
   const reportRef = useRef(null)
   const rubricRefs = useRef({})
@@ -575,7 +575,7 @@ export default function SessionReport() {
 
   function handleExportRubric(studentIds, perStudent = false) {
     rubricRefs.current = {}
-    setExportTarget({ studentIds, perStudent, showClassAverage, showCijfer })
+    setExportTarget({ studentIds, perStudent, showCijfer })
   }
 
   if (!data) return <div className="page">{error || 'Laden...'}</div>
@@ -590,14 +590,6 @@ export default function SessionReport() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#555', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={showClassAverage}
-              onChange={e => setShowClassAverage(e.target.checked)}
-            />
-            Klasgemiddelde tonen op rapport
-          </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#555', cursor: 'pointer' }}>
             <input
               type="checkbox"
@@ -684,9 +676,7 @@ export default function SessionReport() {
                   session={data.session}
                   questions={data.questions}
                   scores={data.scores}
-                  classAverages={data.class_averages}
                   grade={gradeMap[sid] ?? null}
-                  showClassAverage={exportTarget.showClassAverage}
                   showCijfer={exportTarget.showCijfer}
                 />
               </div>

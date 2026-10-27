@@ -215,3 +215,24 @@ export function computeGrade(student, questions, scoreMap, gradingMethod, gradeC
 
   return null
 }
+
+// Per learning goal: the applicable questions with their score and whether the
+// threshold is met. A goal is achieved only when every one of its questions is.
+// `scores` is keyed `${studentId}|${questionId}` (report payload format).
+export function learningGoalResults(questions, scores, studentId) {
+  const goals = []
+  const byName = {}
+  questions.forEach(q => {
+    if (!q.learning_goal || q.learning_goal_threshold == null) return
+    const sc = scores[`${studentId}|${q.id}`]
+    if (sc?.excluded) return
+    const points = sc && sc.points !== null && sc.points !== undefined ? sc.points : null
+    if (!byName[q.learning_goal]) {
+      byName[q.learning_goal] = { name: q.learning_goal, items: [] }
+      goals.push(byName[q.learning_goal])
+    }
+    byName[q.learning_goal].items.push({ question: q, points, passed: points !== null && points >= q.learning_goal_threshold })
+  })
+  goals.forEach(g => { g.achieved = g.items.every(it => it.passed) })
+  return goals
+}
