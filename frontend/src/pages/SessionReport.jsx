@@ -485,6 +485,7 @@ export default function SessionReport() {
   const [exportTarget, setExportTarget] = useState(null)
   const [isExportingRubric, setIsExportingRubric] = useState(false)
   const [showCijfer, setShowCijfer] = useState(false)
+  const [showGoalsPage, setShowGoalsPage] = useState(true)
   const reportRef = useRef(null)
   const rubricRefs = useRef({})
 
@@ -575,7 +576,7 @@ export default function SessionReport() {
 
   function handleExportRubric(studentIds, perStudent = false) {
     rubricRefs.current = {}
-    setExportTarget({ studentIds, perStudent, showCijfer })
+    setExportTarget({ studentIds, perStudent, showCijfer, showGoalsPage })
   }
 
   if (!data) return <div className="page">{error || 'Laden...'}</div>
@@ -597,6 +598,14 @@ export default function SessionReport() {
               onChange={e => setShowCijfer(e.target.checked)}
             />
             Cijfer tonen op rapport
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#555', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={showGoalsPage}
+              onChange={e => setShowGoalsPage(e.target.checked)}
+            />
+            Leerdoelenbladzijde toevoegen
           </label>
           <button className="btn btn-secondary" onClick={handleExport} disabled={exporting}>
             {exporting ? 'Exporteren...' : 'Exporteer PDF'}
@@ -678,6 +687,7 @@ export default function SessionReport() {
                   scores={data.scores}
                   grade={gradeMap[sid] ?? null}
                   showCijfer={exportTarget.showCijfer}
+                  showGoalsPage={exportTarget.showGoalsPage}
                 />
               </div>
             )

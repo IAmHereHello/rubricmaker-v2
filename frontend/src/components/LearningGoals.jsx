@@ -20,13 +20,15 @@ export function GoalRequirement({ question, fontSize = 11 }) {
 }
 
 // Block listing every goal, whether it is achieved and the questions it depends on.
-export function GoalSummary({ goals, fontSize = 12 }) {
+export function GoalSummary({ goals, fontSize = 12, showTitle = true }) {
   if (!goals.length) return null
   return (
     <div>
-      <div style={{ fontSize: fontSize - 1, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
-        Leerdoelen
-      </div>
+      {showTitle && (
+        <div style={{ fontSize: fontSize - 1, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
+          Leerdoelen
+        </div>
+      )}
       <div style={{ fontSize: fontSize - 1, color: '#6b7280', marginBottom: 8 }}>
         Een leerdoel is behaald als je bij elke opgave van dat leerdoel de minimumscore haalt.
       </div>

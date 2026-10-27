@@ -24,7 +24,18 @@ function formatThreshold(test, route) {
   return null
 }
 
-export default function StudentRubric({ student, test, session, questions, scores, grade, showCijfer }) {
+// Each section is rendered from the top of a new PDF page (see exportRubric.js).
+const PAGE_STYLE = {
+  fontFamily: 'system-ui, Arial, sans-serif',
+  fontSize: 13,
+  color: '#111',
+  background: '#ffffff',
+  padding: '28px 36px',
+  width: 794,
+  boxSizing: 'border-box',
+}
+
+export default function StudentRubric({ student, test, session, questions, scores, grade, showCijfer, showGoalsPage = true }) {
   const applicable = questions.filter(q => !scores[`${student.id}|${q.id}`]?.excluded)
 
   let totalScored = 0, totalMax = 0
@@ -51,15 +62,8 @@ export default function StudentRubric({ student, test, session, questions, score
   })
 
   return (
-    <div style={{
-      fontFamily: 'system-ui, Arial, sans-serif',
-      fontSize: 13,
-      color: '#111',
-      background: '#ffffff',
-      padding: '28px 36px',
-      width: 794,
-      boxSizing: 'border-box',
-    }}>
+    <>
+    <div data-pdf-section style={PAGE_STYLE}>
       {/* Document header */}
       <div style={{ borderBottom: '2px solid #e5e7eb', paddingBottom: 10, marginBottom: 16 }}>
         <div style={{ fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 3 }}>
@@ -153,8 +157,28 @@ export default function StudentRubric({ student, test, session, questions, score
           })}
         </tbody>
       </table>
-
-      <GoalSummary goals={goals} />
     </div>
+
+    {/* Learning goals page, printed on the back when exported double-sided */}
+    {showGoalsPage && goalsTotal > 0 && (
+      <div data-pdf-section style={PAGE_STYLE}>
+        <div style={{ borderBottom: '2px solid #e5e7eb', paddingBottom: 10, marginBottom: 16 }}>
+          <div style={{ fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 3 }}>
+            Leerdoelen
+          </div>
+          <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 3 }}>{student.name}</div>
+          <div style={{ fontSize: 12, color: '#6b7280' }}>
+            {test.name} · Klas {session.class_name} · {date}
+          </div>
+          <div style={{ fontSize: 13, marginTop: 6 }}>
+            <strong style={{ color: goalsAchieved === goalsTotal ? '#15803d' : '#b91c1c' }}>
+              {goalsAchieved} van {goalsTotal}
+            </strong>{' '}leerdoelen behaald
+          </div>
+        </div>
+        <GoalSummary goals={goals} showTitle={false} />
+      </div>
+    )}
+    </>
   )
 }

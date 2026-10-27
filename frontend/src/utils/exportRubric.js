@@ -44,11 +44,26 @@ async function addElementPages(pdf, element, startOnNewPage) {
   }
 }
 
+const pageCount = pdf => pdf.internal.getNumberOfPages()
+
+// A student's report consists of one or more `data-pdf-section` elements (front
+// page, learning goals page); each starts on a new page so the goals page lands
+// on the back when printed double-sided. Returns the number of pages added.
+async function addStudentPages(pdf, element, startOnNewPage) {
+  const before = startOnNewPage ? pageCount(pdf) : 0
+  const sections = element.querySelectorAll('[data-pdf-section]')
+  const parts = sections.length ? [...sections] : [element]
+  for (let i = 0; i < parts.length; i++) {
+    await addElementPages(pdf, parts[i], startOnNewPage || i > 0)
+  }
+  return pageCount(pdf) - before
+}
+
 export async function exportRubricsPerStudentPDF(pairs) {
   for (const { element, name } of pairs) {
     if (!element) continue
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-    await addElementPages(pdf, element, false)
+    await addStudentPages(pdf, element, false)
     pdf.save(name)
   }
 }
@@ -56,11 +71,14 @@ export async function exportRubricsPerStudentPDF(pairs) {
 export async function exportRubricsPDF(elements, filename) {
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
 
+  // Pad every student to an even page count so each one starts on a new sheet
+  // when printed double-sided.
+  const present = elements.filter(Boolean)
   let firstPage = true
-  for (const el of elements) {
-    if (!el) continue
-    await addElementPages(pdf, el, !firstPage)
+  for (let i = 0; i < present.length; i++) {
+    const added = await addStudentPages(pdf, present[i], !firstPage)
     firstPage = false
+    if (added % 2 === 1 && i < present.length - 1) pdf.addPage()
   }
 
   if (!firstPage) pdf.save(filename)
