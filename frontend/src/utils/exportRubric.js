@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 import JSZip from 'jszip'
+import { planPageSlices } from './pdfPaging.js'
 
 const CONTINUATION_MARGIN_MM = 10
 // JPEG keeps a page around 150 KB; PNG at this size was ~15 MB per page,
@@ -24,23 +25,17 @@ async function addElementPages(pdf, element, startOnNewPage) {
   const breaks = [...element.querySelectorAll('[data-pdf-block]')]
     .map(el => Math.round((el.getBoundingClientRect().bottom - top) * pxPerCss))
 
-  // Drop the whitespace below the last block; on its own it would become a blank page.
-  const contentHeight = breaks.length
-    ? Math.min(canvas.height, Math.max(...breaks) + Math.round(BOTTOM_PADDING_CSS * pxPerCss))
-    : canvas.height
+  const slices = planPageSlices({
+    breaks,
+    canvasHeight: canvas.height,
+    firstPageHeight: Math.floor(pdfHeight * pxPerMm),
+    nextPageHeight: Math.floor((pdfHeight - CONTINUATION_MARGIN_MM) * pxPerMm),
+    padding: Math.round(BOTTOM_PADDING_CSS * pxPerCss),
+  })
 
-  let y = 0
-  let first = true
-  while (y < contentHeight - 1) {
+  slices.forEach(([y, end], i) => {
+    const first = i === 0
     const marginMm = first ? 0 : CONTINUATION_MARGIN_MM
-    let end = y + Math.floor((pdfHeight - marginMm) * pxPerMm)
-    if (end >= contentHeight) {
-      end = contentHeight
-    } else {
-      const fitting = breaks.filter(b => b > y && b <= end)
-      if (fitting.length) end = Math.max(...fitting)
-    }
-
     const slice = document.createElement('canvas')
     slice.width = canvas.width
     slice.height = end - y
@@ -51,9 +46,7 @@ async function addElementPages(pdf, element, startOnNewPage) {
 
     if (startOnNewPage || !first) pdf.addPage()
     pdf.addImage(slice.toDataURL('image/jpeg', JPEG_QUALITY), 'JPEG', 0, marginMm, pdfWidth, slice.height / pxPerMm)
-    y = end
-    first = false
-  }
+  })
 }
 
 const pageCount = pdf => pdf.internal.getNumberOfPages()
