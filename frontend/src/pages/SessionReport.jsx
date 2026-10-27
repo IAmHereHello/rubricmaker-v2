@@ -4,8 +4,7 @@ import * as api from '../api.js'
 import RouteBadge from '../components/RouteBadge.jsx'
 import { LEVEL_LABELS } from '../constants.js'
 import { displayCijfer, formatCijfer, gradeLabel, computeGrade, isCijferGrade, learningGoalResults } from '../utils/gradingLogic.js'
-import { exportPDF } from '../utils/exportPDF.js'
-import { exportRubricsPDF, exportRubricsPerStudentPDF } from '../utils/exportRubric.js'
+import { exportRubricsPDF, exportRubricsZip } from '../utils/exportRubric.js'
 import StudentRubric from '../components/StudentRubric.jsx'
 import { GoalRequirement, GoalSummary } from '../components/LearningGoals.jsx'
 
@@ -45,7 +44,7 @@ function computeGoals(questions, scores, studentId) {
   }
 }
 
-function StudentView({ data, selectedId, setSelectedId, onExportRubric, isExportingRubric, grades, onEdit }) {
+function StudentView({ data, selectedId, setSelectedId, grades, onEdit }) {
   const student = data.students.find(s => s.id === selectedId)
 
   let totalScored = 0, totalMax = 0
@@ -104,16 +103,6 @@ function StudentView({ data, selectedId, setSelectedId, onExportRubric, isExport
             onClick={() => onEdit(student.id)}
           >
             Bewerken
-          </button>
-        )}
-        {student && (
-          <button
-            className="btn btn-secondary"
-            style={{ alignSelf: 'flex-end' }}
-            onClick={() => onExportRubric([student.id])}
-            disabled={isExportingRubric}
-          >
-            {isExportingRubric ? 'Exporteren...' : 'Download rubric'}
           </button>
         )}
       </div>
@@ -472,6 +461,24 @@ function ResultsView({ data, grades, onEdit }) {
   )
 }
 
+function ExportMenuItem({ onClick, children }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px',
+        background: 'none', border: 'none', borderRadius: 4, fontSize: 14, cursor: 'pointer',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.background = '#f3f4f6' }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+    >
+      {children}
+    </button>
+  )
+}
+
+const safeFilename = name => name.replace(/[\\/:*?"<>|]/g, '-')
+
 export default function SessionReport() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -480,14 +487,14 @@ export default function SessionReport() {
   const [error, setError] = useState('')
   const [view, setViewState] = useState(searchParams.get('view') || 'student')
   const [selectedStudentId, setSelectedStudentId] = useState(null)
-  const [exporting, setExporting] = useState(false)
   const [grades, setGrades] = useState([])
   const [exportTarget, setExportTarget] = useState(null)
-  const [isExportingRubric, setIsExportingRubric] = useState(false)
+  const [exportProgress, setExportProgress] = useState(null)
+  const [exportMenuOpen, setExportMenuOpen] = useState(false)
   const [showCijfer, setShowCijfer] = useState(false)
   const [showGoalsPage, setShowGoalsPage] = useState(true)
-  const reportRef = useRef(null)
   const rubricRefs = useRef({})
+  const exportMenuRef = useRef(null)
 
   // Keep the open tab and student in the URL so returning from Bewerken lands on the same spot
   function updateParams(changes) {
@@ -534,49 +541,47 @@ export default function SessionReport() {
   )
 
   useEffect(() => {
+    if (!exportMenuOpen) return
+    const close = e => { if (!exportMenuRef.current?.contains(e.target)) setExportMenuOpen(false) }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [exportMenuOpen])
+
+  useEffect(() => {
     if (!exportTarget || !data) return
     const timer = setTimeout(async () => {
-      setIsExportingRubric(true)
+      const onProgress = (done, total) => setExportProgress({ done, total })
+      onProgress(0, exportTarget.studentIds.length)
       try {
-        const date = data.session.created_at.slice(0, 10)
-        if (exportTarget.perStudent) {
+        const testName = data.test.name
+        const className = data.session.class_name
+        if (exportTarget.mode === 'zip') {
           const pairs = exportTarget.studentIds.map(sid => {
             const student = data.students.find(s => s.id === sid)
-            return { element: rubricRefs.current[sid], name: `rubric-${student?.name ?? sid}-${date}.pdf` }
+            return { element: rubricRefs.current[sid], name: safeFilename(`toetsrapport - ${student?.name ?? sid} - ${testName}.pdf`) }
           })
-          await exportRubricsPerStudentPDF(pairs)
+          await exportRubricsZip(pairs, safeFilename(`toetsrapporten - ${className} - ${testName}.zip`), onProgress)
         } else {
-          const elements = exportTarget.studentIds.map(sid => rubricRefs.current[sid]).filter(Boolean)
-          const filename = exportTarget.studentIds.length === 1
-            ? `rubric-${data.students.find(s => s.id === exportTarget.studentIds[0])?.name ?? 'leerling'}-${date}.pdf`
-            : `rubrieken-${data.session.class_name}-${date}.pdf`
-          await exportRubricsPDF(elements, filename)
+          const elements = exportTarget.studentIds.map(sid => rubricRefs.current[sid])
+          const filename = exportTarget.mode === 'student'
+            ? `toetsrapport - ${data.students.find(s => s.id === exportTarget.studentIds[0])?.name ?? 'leerling'} - ${testName}.pdf`
+            : `toetsrapporten - ${className} - ${testName}.pdf`
+          await exportRubricsPDF(elements, safeFilename(filename), onProgress)
         }
       } finally {
         setExportTarget(null)
-        setIsExportingRubric(false)
+        setExportProgress(null)
       }
     }, 300)
     return () => clearTimeout(timer)
   }, [exportTarget])
 
-  async function handleExport() {
-    if (!reportRef.current || !data) return
-    setExporting(true)
-    try {
-      const date = data.session.created_at.slice(0, 10)
-      await exportPDF(
-        reportRef.current,
-        `rapport-${data.test.name}-${data.session.class_name}-${date}.pdf`
-      )
-    } finally {
-      setExporting(false)
-    }
-  }
-
-  function handleExportRubric(studentIds, perStudent = false) {
+  // mode: 'student' (one PDF), 'class' (all students in one PDF) or 'zip' (one PDF per student)
+  function handleExportRubric(mode) {
+    setExportMenuOpen(false)
+    const studentIds = mode === 'student' ? [selectedStudentId] : data.students.map(s => s.id)
     rubricRefs.current = {}
-    setExportTarget({ studentIds, perStudent, showCijfer, showGoalsPage })
+    setExportTarget({ studentIds, mode, showCijfer, showGoalsPage })
   }
 
   if (!data) return <div className="page">{error || 'Laden...'}</div>
@@ -591,39 +596,55 @@ export default function SessionReport() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#555', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={showCijfer}
-              onChange={e => setShowCijfer(e.target.checked)}
-            />
-            Cijfer tonen op rapport
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#555', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={showGoalsPage}
-              onChange={e => setShowGoalsPage(e.target.checked)}
-            />
-            Leerdoelenbladzijde toevoegen
-          </label>
-          <button className="btn btn-secondary" onClick={handleExport} disabled={exporting}>
-            {exporting ? 'Exporteren...' : 'Exporteer PDF'}
-          </button>
-          <button
-            className="btn btn-secondary"
-            onClick={() => handleExportRubric(data.students.map(s => s.id))}
-            disabled={isExportingRubric || !data?.students?.length}
-          >
-            {isExportingRubric ? 'Exporteren...' : 'Rubrieken exporteren'}
-          </button>
-          <button
-            className="btn btn-secondary"
-            onClick={() => handleExportRubric(data.students.map(s => s.id), true)}
-            disabled={isExportingRubric || !data?.students?.length}
-          >
-            {isExportingRubric ? 'Exporteren...' : 'Per leerling exporteren'}
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 13, color: '#555' }}>
+            <span style={{ fontWeight: 600 }}>Op het toetsrapport:</span>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={showCijfer}
+                onChange={e => setShowCijfer(e.target.checked)}
+              />
+              Cijfer tonen
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={showGoalsPage}
+                onChange={e => setShowGoalsPage(e.target.checked)}
+              />
+              Leerdoelenbladzijde toevoegen
+            </label>
+          </div>
+          <div ref={exportMenuRef} style={{ position: 'relative' }}>
+            <button
+              className="btn btn-primary"
+              onClick={() => setExportMenuOpen(o => !o)}
+              disabled={!!exportTarget || !data.students.length}
+            >
+              {exportProgress
+                ? `Bezig: ${exportProgress.done + 1} van ${exportProgress.total}`
+                : 'Toetsrapport exporteren ▾'}
+            </button>
+            {exportMenuOpen && (
+              <div style={{
+                position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 10,
+                background: '#fff', border: '1px solid #d1d5db', borderRadius: 6,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.12)', minWidth: 260, padding: 4,
+              }}>
+                {view === 'student' && selectedStudentId && (
+                  <ExportMenuItem onClick={() => handleExportRubric('student')}>
+                    Huidige leerling ({data.students.find(s => s.id === selectedStudentId)?.name})
+                  </ExportMenuItem>
+                )}
+                <ExportMenuItem onClick={() => handleExportRubric('class')}>
+                  Hele klas, in 1 PDF
+                </ExportMenuItem>
+                <ExportMenuItem onClick={() => handleExportRubric('zip')}>
+                  Hele klas, PDF per leerling (ZIP)
+                </ExportMenuItem>
+              </div>
+            )}
+          </div>
           <Link to="/reports" className="btn btn-secondary">← Terug</Link>
         </div>
       </div>
@@ -651,7 +672,7 @@ export default function SessionReport() {
         </button>
       </div>
 
-      <div ref={reportRef}>
+      <div>
         {data.students.length === 0 ? (
           <div className="card"><p className="text-muted">Geen leerlingen gevonden voor klas {data.session.class_name}.</p></div>
         ) : view === 'student' ? (
@@ -659,9 +680,7 @@ export default function SessionReport() {
             data={data}
             selectedId={selectedStudentId}
             setSelectedId={selectStudent}
-            onExportRubric={handleExportRubric}
             grades={gradeMap}
-            isExportingRubric={isExportingRubric}
             onEdit={handleEdit}
           />
         ) : view === 'results' ? (
