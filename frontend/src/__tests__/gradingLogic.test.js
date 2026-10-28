@@ -12,6 +12,7 @@ import {
   findMissingScores,
   findStaleScores,
   learningGoalResults,
+  gradeExplanation,
 } from '../utils/gradingLogic.js'
 
 const orangeQ1 = { id: 1, routes: ['oranje'], max_score: 10 }
@@ -189,5 +190,33 @@ describe('learningGoalResults', () => {
     expect(res[0].achieved).toBe(true)
     expect(res[1].items[0].points).toBeNull()
     expect(res[1].achieved).toBe(false)
+  })
+})
+
+describe('gradeExplanation', () => {
+  test('learning goal test', () => {
+    expect(gradeExplanation({
+      gradingMethod: 'goals', routeConfig: { beheerst: 8, expert: 10 }, name: 'Tije',
+      goalsAchieved: 7, goalsTotal: 11, grade: 'in_ontwikkeling',
+    })).toBe('Tije heeft in deze toets 7 van de 11 leerdoelen aangetoond. Vanaf 8 leerdoelen beheers je de stof, vanaf 10 leerdoelen ben je een expert. Tije is nog in ontwikkeling.')
+  })
+
+  test('points test shows points rounded up and percentage', () => {
+    expect(gradeExplanation({
+      gradingMethod: 'points', routeConfig: { beheerst: 60, expert: 85 }, name: 'Tije',
+      scored: 19, max: 24, grade: 'beheerst',
+    })).toBe('Tije heeft in deze toets 19 van de 24 punten gehaald (79%). Vanaf 15 punten (60%) beheers je de stof, vanaf 21 punten (85%) ben je een expert. Tije beheerst de stof.')
+  })
+
+  test('singular wording and missing grade', () => {
+    expect(gradeExplanation({
+      gradingMethod: 'goals', routeConfig: { beheerst: 1, expert: 2 }, name: 'Sam',
+      goalsAchieved: 1, goalsTotal: 1, grade: null,
+    })).toBe('Sam heeft in deze toets 1 van de 1 leerdoel aangetoond. Vanaf 1 leerdoel beheers je de stof, vanaf 2 leerdoelen ben je een expert.')
+  })
+
+  test('no explanation for cijfer tests or missing config', () => {
+    expect(gradeExplanation({ gradingMethod: 'cijfer', routeConfig: { multiplier: 9 } })).toBeNull()
+    expect(gradeExplanation({ gradingMethod: 'goals', routeConfig: undefined })).toBeNull()
   })
 })

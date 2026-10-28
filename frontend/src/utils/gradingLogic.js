@@ -236,3 +236,32 @@ export function learningGoalResults(questions, scores, studentId) {
   goals.forEach(g => { g.achieved = g.items.every(it => it.passed) })
   return goals
 }
+
+const GRADE_CONCLUSIONS = {
+  in_ontwikkeling: 'is nog in ontwikkeling',
+  beheerst: 'beheerst de stof',
+  expert: 'is een expert',
+}
+
+// Student-facing explanation of the In ontwikkeling / Beheerst / Expert label.
+// `routeConfig` is the test's grade_config for the student's route. Returns null
+// for cijfer tests or when the test has no usable grading config.
+export function gradeExplanation({ gradingMethod, routeConfig, name, goalsAchieved, goalsTotal, scored, max, grade }) {
+  if (!routeConfig) return null
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`
+  let result, thresholds
+  if (gradingMethod === 'goals') {
+    if (!goalsTotal) return null
+    result = `${name} heeft in deze toets ${goalsAchieved} van de ${plural(goalsTotal, 'leerdoel', 'leerdoelen')} aangetoond.`
+    thresholds = `Vanaf ${plural(routeConfig.beheerst, 'leerdoel', 'leerdoelen')} beheers je de stof, vanaf ${plural(routeConfig.expert, 'leerdoel', 'leerdoelen')} ben je een expert.`
+  } else if (gradingMethod === 'points') {
+    if (!max) return null
+    const points = pct => Math.ceil(pct / 100 * max - 1e-9)
+    result = `${name} heeft in deze toets ${scored} van de ${max} punten gehaald (${Math.round(scored / max * 100)}%).`
+    thresholds = `Vanaf ${plural(points(routeConfig.beheerst), 'punt', 'punten')} (${routeConfig.beheerst}%) beheers je de stof, vanaf ${plural(points(routeConfig.expert), 'punt', 'punten')} (${routeConfig.expert}%) ben je een expert.`
+  } else {
+    return null
+  }
+  const conclusion = GRADE_CONCLUSIONS[grade] ? ` ${name} ${GRADE_CONCLUSIONS[grade]}.` : ''
+  return `${result} ${thresholds}${conclusion}`
+}
