@@ -1,7 +1,7 @@
 import RouteBadge from './RouteBadge.jsx'
 import { GoalRequirement, GoalSummary } from './LearningGoals.jsx'
 import { LEVEL_LABELS } from '../constants.js'
-import { STAR_VALUE, isCijferGrade, gradeLabel, formatCijferFormula, formatCijfer, displayCijfer, learningGoalResults } from '../utils/gradingLogic.js'
+import { STAR_VALUE, isCijferGrade, gradeLabel, formatCijferFormula, formatCijfer, displayCijfer, learningGoalResults, gradeExplanation } from '../utils/gradingLogic.js'
 
 const GRADE_STYLES = {
   expert: { background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d' },
@@ -57,6 +57,22 @@ export default function StudentRubric({ student, test, session, questions, score
   const goalsTotal = goals.length
 
   const thresholdText = formatThreshold(test, student.route)
+  const hasGoalsPage = showGoalsPage && goalsTotal > 0
+  const explanation = isCijferTest ? null : gradeExplanation({
+    gradingMethod: test.grading_method,
+    routeConfig: test.grade_config?.[student.route],
+    name: student.name,
+    goalsAchieved,
+    goalsTotal,
+    scored: totalScored,
+    max: totalMax,
+    grade: grade?.grade,
+  })
+  const explanationBlock = explanation && (
+    <div data-pdf-block style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6, padding: '10px 14px', fontSize: 13, lineHeight: 1.5, marginTop: 12 }}>
+      {explanation}
+    </div>
+  )
   const date = new Date(session.created_at).toLocaleDateString('nl-NL', {
     day: 'numeric', month: 'long', year: 'numeric',
   })
@@ -112,8 +128,13 @@ export default function StudentRubric({ student, test, session, questions, score
               {grade.stars} sterretje{grade.stars === 1 ? '' : 's'} (−{String(grade.stars * STAR_VALUE).replace('.', ',')})
             </div>
           )}
-          {thresholdText && (
+          {isCijferTest && thresholdText && (
             <div style={{ fontSize: 10, color: '#9ca3af', textAlign: 'right' }}>{thresholdText}</div>
+          )}
+          {explanation && hasGoalsPage && (
+            <div style={{ fontSize: 11, fontWeight: 700, textAlign: 'right' }}>
+              Bekijk de achterkant waarom je deze beoordeling hebt
+            </div>
           )}
         </div>
       </div>
@@ -157,10 +178,12 @@ export default function StudentRubric({ student, test, session, questions, score
           })}
         </tbody>
       </table>
+
+      {!hasGoalsPage && explanationBlock}
     </div>
 
     {/* Learning goals page, printed on the back when exported double-sided */}
-    {showGoalsPage && goalsTotal > 0 && (
+    {hasGoalsPage && (
       <div data-pdf-section style={PAGE_STYLE}>
         <div style={{ borderBottom: '2px solid #e5e7eb', paddingBottom: 10, marginBottom: 16 }}>
           <div style={{ fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 3 }}>
@@ -177,6 +200,7 @@ export default function StudentRubric({ student, test, session, questions, score
           </div>
         </div>
         <GoalSummary goals={goals} showTitle={false} />
+        {explanationBlock}
       </div>
     )}
     </>
