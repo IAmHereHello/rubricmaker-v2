@@ -4,7 +4,7 @@ from typing import List
 
 from ..database import get_db
 from ..models import Session as SessionModel, Score, Test as TestModel, Student as StudentModel, StudentGrade
-from ..schemas import SessionCreate, SessionOut, SessionListOut, SessionOrderUpdate, InhalerDismissBody
+from ..schemas import SessionCreate, SessionOut, SessionListOut, SessionOrderUpdate, SessionModeUpdate, InhalerDismissBody
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -18,10 +18,10 @@ def list_sessions(db: DBSession = Depends(get_db)):
         order = s.student_order or []
 
         mode = s.grading_mode or "horizontal"
-        # Vertical mode: while the stack is still open the expected total covers the whole
-        # class, so a fully graded student does not make the session look complete.
+        # While the stack is still open the expected total covers the whole class, so a
+        # fully graded stack does not make the session look complete.
         count_ids = order
-        if mode == "vertical" and not s.stack_closed:
+        if not s.stack_closed:
             count_ids = [st.id for st in db.query(StudentModel).filter(StudentModel.class_name == s.class_name).all()]
 
         if not order:
@@ -122,6 +122,18 @@ def set_student_order(id: int, body: SessionOrderUpdate, db: DBSession = Depends
     obj.student_order = body.student_order
     if body.stack_closed is not None:
         obj.stack_closed = body.stack_closed
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+@router.put("/{id}/mode", response_model=SessionOut)
+def set_grading_mode(id: int, body: SessionModeUpdate, db: DBSession = Depends(get_db)):
+    """Switch between per vraag (horizontal) and per leerling (vertical). Scores are kept."""
+    obj = db.query(SessionModel).filter(SessionModel.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Sessie niet gevonden")
+    obj.grading_mode = body.grading_mode
     db.commit()
     db.refresh(obj)
     return obj

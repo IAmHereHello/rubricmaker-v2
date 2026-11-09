@@ -28,6 +28,19 @@ def _migrate_db():
             except Exception:
                 pass  # column already exists
 
+        # One-time data fix (tracked with SQLite's user_version, so it never runs twice).
+        # Since switching between per vraag and per leerling, horizontal sessions also use
+        # stack_closed. Existing horizontal sessions were all started before this and keep
+        # their stack as it was, so mark them closed.
+        version = conn.execute(text("PRAGMA user_version")).scalar() or 0
+        if version < 1:
+            conn.execute(text(
+                "UPDATE sessions SET stack_closed = 1 "
+                "WHERE grading_mode IS NULL OR grading_mode = 'horizontal'"
+            ))
+            conn.execute(text("PRAGMA user_version = 1"))
+            conn.commit()
+
 _migrate_db()
 
 app = FastAPI(title="Rubricmaker API", version="1.0.0")

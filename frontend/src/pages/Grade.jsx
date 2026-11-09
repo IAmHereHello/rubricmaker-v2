@@ -13,6 +13,8 @@ import {
   findVerticalResume,
   findMissingScores,
   findStaleScores,
+  hasPostQ1Scores,
+  needsRestEntry,
 } from '../utils/gradingLogic.js'
 
 export default function Grade() {
@@ -61,6 +63,7 @@ export default function Grade() {
   const [vName, setVName] = useState('')
   const [vBusy, setVBusy] = useState(false)
   const vNameRef = useRef(null)
+  const [switching, setSwitching] = useState(false)
 
   // ── Initial load ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -82,36 +85,72 @@ export default function Grade() {
         setStudents(sortedStuds)
         scoresRef.current = scoreMap
         setScores(scoreMap)
-
-        if (sess.grading_mode === 'vertical') {
-          const orderedStuds = (sess.student_order || []).length ? getOrderedStudents(sess, sortedStuds) : []
-          const resume = findVerticalResume(t, orderedStuds, scoreMap)
-          if (resume) {
-            setVStudentId(resume.studentId)
-            setVPos(resume.pos)
-          } else if (sess.stack_closed) {
-            setDone(true)
-          }
-        } else if (shouldEnterQ1Mode(sess, t, scoreMap)) {
-          setQ1Mode(true)
-        } else {
-          const orderedStuds = getOrderedStudents(sess, sortedStuds)
-          const [rqIdx, rsIdx] = findResumePosition(t, orderedStuds, scoreMap)
-          if (rqIdx >= t.questions.length) {
-            const missing = findMissingScores(t, orderedStuds, scoreMap)
-            if (missing.length) setFixQueue(missing)
-            else setDone(true)
-          } else {
-            setQIdx(rqIdx)
-            setSIdx(rsIdx)
-          }
-        }
+        enterMode(sess, t, sortedStuds, scoreMap)
       } catch {
         setError('Fout bij laden van sessie.')
       }
     }
     load()
   }, [id])
+
+  // Open the right place in the session for its grading mode (on load and after switching).
+  function enterMode(sess, t, studs, scoreMap) {
+    setQ1Mode(false)
+    setQ1Name('')
+    setQ1ScoreVal('')
+    setQ1EditingItemId(null)
+    setVStudentId(null)
+    setVPos(0)
+    setVName('')
+    setFixQueue(null)
+    setFixPos(0)
+    setQIdx(0)
+    setSIdx(0)
+    setDone(false)
+    revisitedRef.current = new Set()
+
+    if (sess.grading_mode === 'vertical') {
+      const orderedStuds = (sess.student_order || []).length ? getOrderedStudents(sess, studs) : []
+      const resume = findVerticalResume(t, orderedStuds, scoreMap)
+      if (resume) {
+        setVStudentId(resume.studentId)
+        setVPos(resume.pos)
+      } else if (sess.stack_closed) {
+        setDone(true)
+      }
+    } else if (shouldEnterQ1Mode(sess, t, scoreMap) || needsRestEntry(sess, t, studs, scoreMap)) {
+      setQ1Mode(true)
+    } else {
+      const orderedStuds = getOrderedStudents(sess, studs)
+      const [rqIdx, rsIdx] = findResumePosition(t, orderedStuds, scoreMap)
+      if (rqIdx >= t.questions.length) {
+        const missing = findMissingScores(t, orderedStuds, scoreMap)
+        if (missing.length) setFixQueue(missing)
+        else setDone(true)
+      } else {
+        setQIdx(rqIdx)
+        setSIdx(rsIdx)
+      }
+    }
+  }
+
+  // Switch between per vraag and per leerling. All scores stay; a typed score is saved first.
+  async function switchMode(mode) {
+    if (switching || !session || session.grading_mode === mode) return
+    setSwitching(true)
+    try {
+      if (!q1Mode) await persistScore()
+      const updated = await api.setSessionMode(id, mode)
+      const fresh = await refreshStudents()
+      setSession(updated)
+      setSkipNotice('')
+      enterMode(updated, test, fresh, scoresRef.current)
+    } catch {
+      setError('Wisselen mislukt.')
+    } finally {
+      setSwitching(false)
+    }
+  }
 
   // ── Derived state (regular mode) ─────────────────────────────────────────────
   const orderedStudents = useMemo(
@@ -388,8 +427,19 @@ export default function Grade() {
     const fresh = await refreshStudents()
     const stack = order.map(sid => fresh.find(s => s.id === sid)).filter(Boolean)
     await createExcludedForStudent(fresh.find(s => s.id === student.id) ?? student)
-    const missing = (await checkRouteChanges(stack))
+    const allMissing = await checkRouteChanges(stack)
+    const curPos = order.indexOf(student.id)
+    const missing = allMissing
+      .filter(m => order.indexOf(m.studentId) <= curPos)
       .filter(m => !revisitedRef.current.has(`${m.qIdx}-${m.studentId}`))
+    // Students later in the stack with open questions (after switching from per vraag):
+    // simply continue with the next one, after any route-change catch-up below
+    const nextResume = findVerticalResume(test, stack.filter(s => order.indexOf(s.id) > curPos), scoresRef.current)
+    if (!missing.length && nextResume) {
+      setVStudentId(nextResume.studentId)
+      setVPos(nextResume.pos)
+      return
+    }
     if (missing.length) {
       // Go back to the missed questions (this student's first) before the next student
       const targetId = missing.some(m => m.studentId === student.id) ? student.id : missing[0].studentId
@@ -403,7 +453,8 @@ export default function Grade() {
     }
     setVStudentId(null)
     setVPos(0)
-    if (order.length >= students.length) await closeStack(order)
+    // A stack closed earlier (e.g. per vraag before switching) gets no new students
+    if (order.length >= students.length || session?.stack_closed) await closeStack(order)
   }
 
   async function handleVPick() {
@@ -504,7 +555,25 @@ export default function Grade() {
     // Ensure excluded Q1 scores exist for any non-applicable students in the stack
     await createExcludedScores(test.questions[0], ordered)
 
+    // The stack is complete: students not entered now are inhalers (also after switching modes)
+    const updated = await api.setSessionOrder(id, { student_order: newStudentOrder, stack_closed: true })
+    setSession(updated)
+
     setQ1Mode(false)
+
+    // Coming from per leerling: part of the stack already has later questions graded
+    if (hasPostQ1Scores(test, scoresRef.current)) {
+      const fresh = await refreshStudents()
+      const stack = getOrderedStudents(updated, fresh)
+      const [rqIdx, rsIdx] = findResumePosition(test, stack, scoresRef.current)
+      if (rqIdx >= test.questions.length) {
+        await finishHorizontal(newStudentOrder)
+      } else {
+        setQIdx(rqIdx)
+        setSIdx(rsIdx)
+      }
+      return
+    }
 
     if (test.questions.length <= 1) {
       await finishHorizontal(newStudentOrder)
@@ -805,7 +874,8 @@ export default function Grade() {
           <div className="grade-sidebar">
             <div className="card" style={{ fontSize: 13 }}>
               <div style={{ fontWeight: 700, marginBottom: 6 }}>{test.name}</div>
-              <div className="text-muted">Klas {session.class_name} · per leerling</div>
+              <div className="text-muted">Klas {session.class_name}</div>
+              <ModeSwitch mode={session.grading_mode} onSwitch={switchMode} busy={switching} />
               <hr className="divider" />
               {test.questions.map((q, i) => (
                 <div key={q.id} style={{ padding: '3px 0', color: '#aaa', fontSize: 13 }}>
@@ -833,10 +903,17 @@ export default function Grade() {
       return s && (q1.routes || []).includes(s.route)
     }).length
     const q1IsApplicable = !q1SelectedStudent || isApplicableForQuestion(q1SelectedStudent, q1)
+    const isRestEntry = hasPostQ1Scores(test, scores)
 
     return (
       <div className="page" style={{ maxWidth: 1040, marginLeft: 'auto', marginRight: 'auto' }}>
         {error && <div className="alert alert-error">{error}</div>}
+
+        {isRestEntry && (
+          <div className="alert" style={{ background: '#e8f0fc', border: '1px solid #b6cdf2', borderRadius: 6, padding: '10px 14px', marginBottom: 12, color: '#1e3a5f' }}>
+            Typ eerst de overige leerlingen in, in de volgorde van je stapel. Daarna ga je per vraag verder waar je was.
+          </div>
+        )}
 
         <div style={{ background: '#e0e3ea', borderRadius: 6, height: 6, marginBottom: 20 }}>
           <div style={{
@@ -1016,6 +1093,7 @@ export default function Grade() {
             <div className="card" style={{ fontSize: 13 }}>
               <div style={{ fontWeight: 700, marginBottom: 6 }}>{test.name}</div>
               <div className="text-muted">Klas {session.class_name}</div>
+              <ModeSwitch mode={session.grading_mode} onSwitch={switchMode} busy={switching} />
               <hr className="divider" />
               {test.questions.map((q, i) => (
                 <div key={q.id} style={{
@@ -1080,7 +1158,7 @@ export default function Grade() {
               {fixQueue
                 ? `Inhalen: ${fixPos + 1} van ${fixQueue.length} — Vraag ${curQIdx + 1}`
                 : isVertical
-                ? `Vraag ${curQIdx + 1} van ${test.questions.length} — Leerling ${(session.student_order || []).indexOf(currentStudent.id) + 1} van ${students.length}`
+                ? `Vraag ${curQIdx + 1} van ${test.questions.length} — Leerling ${(session.student_order || []).indexOf(currentStudent.id) + 1} van ${session.stack_closed ? (session.student_order || []).length : students.length}`
                 : `Vraag ${qIdx + 1} van ${test.questions.length} — Leerling ${sIdx + 1} van ${applicableStudents.length}`}
             </span>
           </div>
@@ -1224,6 +1302,7 @@ export default function Grade() {
           <div className="card" style={{ fontSize: 13 }}>
             <div style={{ fontWeight: 700, marginBottom: 6 }}>{test.name}</div>
             <div className="text-muted">Klas {session.class_name}</div>
+            <ModeSwitch mode={session.grading_mode} onSwitch={switchMode} busy={switching} />
             <hr className="divider" />
             {test.questions.map((q, i) => {
               const isPast = i < curQIdx
@@ -1245,6 +1324,29 @@ export default function Grade() {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Per vraag / per leerling switch ─────────────────────────────────────────────
+
+function ModeSwitch({ mode, onSwitch, busy }) {
+  const current = mode === 'vertical' ? 'vertical' : 'horizontal'
+  const opts = [['horizontal', 'Per vraag'], ['vertical', 'Per leerling']]
+  return (
+    <div className="mode-switch" role="group" aria-label="Nakijkvolgorde">
+      {opts.map(([value, label]) => (
+        <button
+          key={value}
+          type="button"
+          className={current === value ? 'active' : ''}
+          aria-pressed={current === value}
+          disabled={busy}
+          onClick={() => onSwitch(value)}
+        >
+          {label}
+        </button>
+      ))}
     </div>
   )
 }

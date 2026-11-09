@@ -13,6 +13,8 @@ import {
   findStaleScores,
   learningGoalResults,
   gradeExplanation,
+  hasPostQ1Scores,
+  needsRestEntry,
 } from '../utils/gradingLogic.js'
 
 const orangeQ1 = { id: 1, routes: ['oranje'], max_score: 10 }
@@ -218,5 +220,36 @@ describe('gradeExplanation', () => {
   test('no explanation for cijfer tests or missing config', () => {
     expect(gradeExplanation({ gradingMethod: 'cijfer', routeConfig: { multiplier: 9 } })).toBeNull()
     expect(gradeExplanation({ gradingMethod: 'goals', routeConfig: undefined })).toBeNull()
+  })
+})
+
+describe('switching per leerling -> per vraag', () => {
+  const t = { questions: [{ id: 1, routes: ['geel'] }, { id: 2, routes: ['geel'] }] }
+  const studs = [{ id: 10, route: 'geel' }, { id: 11, route: 'geel' }]
+  const partial = { '1-10': { points: 2 }, '2-10': { points: 1 } }
+
+  test('hasPostQ1Scores detects scores beyond vraag 1', () => {
+    expect(hasPostQ1Scores(t, partial)).toBe(true)
+    expect(hasPostQ1Scores(t, { '1-10': { points: 2 } })).toBe(false)
+  })
+
+  test('open stack with remaining students needs rest entry', () => {
+    const sess = { student_order: [10], stack_closed: false }
+    expect(needsRestEntry(sess, t, studs, partial)).toBe(true)
+  })
+
+  test('closed stack does not (remaining students are inhalers)', () => {
+    const sess = { student_order: [10], stack_closed: true }
+    expect(needsRestEntry(sess, t, studs, partial)).toBe(false)
+  })
+
+  test('everyone in the stack does not', () => {
+    const sess = { student_order: [10, 11], stack_closed: false }
+    expect(needsRestEntry(sess, t, studs, partial)).toBe(false)
+  })
+
+  test('no scores beyond vraag 1 is the normal vraag 1 entry, not rest entry', () => {
+    const sess = { student_order: [10], stack_closed: false }
+    expect(needsRestEntry(sess, t, studs, { '1-10': { points: 2 } })).toBe(false)
   })
 })

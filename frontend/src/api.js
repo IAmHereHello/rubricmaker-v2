@@ -53,6 +53,9 @@ export const deleteSession = (id) => http.delete(`/sessions/${id}`).then(r => r.
 export const setSessionOrder = (id, data) =>
   http.put(`/sessions/${id}/order`, data).then(r => r.data)
 
+export const setSessionMode = (id, grading_mode) =>
+  http.put(`/sessions/${id}/mode`, { grading_mode }).then(r => r.data)
+
 export const dismissInhaler = (session_id, student_id) =>
   http.post(`/sessions/${session_id}/dismiss-inhaler`, { student_id }).then(r => r.data)
 
