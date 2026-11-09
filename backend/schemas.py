@@ -142,6 +142,9 @@ class SessionOrderUpdate(BaseModel):
     student_order: List[int]
     stack_closed: Optional[bool] = None
 
+class SessionModeUpdate(BaseModel):
+    grading_mode: Literal["horizontal", "vertical"]
+
 class InhalerDismissBody(BaseModel):
     student_id: int
 

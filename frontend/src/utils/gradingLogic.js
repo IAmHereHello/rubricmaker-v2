@@ -27,6 +27,22 @@ export function shouldEnterQ1Mode(sess, t, scoreMap) {
   return !allScored
 }
 
+// True when a stack member already has scores beyond question 1.
+export function hasPostQ1Scores(t, scoreMap) {
+  if (!t?.questions.length) return false
+  return t.questions.slice(1).some(q => Object.keys(scoreMap).some(k => k.startsWith(`${q.id}-`)))
+}
+
+// Per vraag, after switching from per leerling with an open stack: the students not yet
+// in the stack are typed in first (stack order, with their score for vraag 1).
+export function needsRestEntry(sess, t, studs, scoreMap) {
+  if (!sess || sess.stack_closed || !t?.questions.length) return false
+  const order = sess.student_order || []
+  if (!order.length || shouldEnterQ1Mode(sess, t, scoreMap)) return false
+  const inOrder = new Set(order)
+  return studs.some(s => !inOrder.has(s.id))
+}
+
 export function findResumePosition(t, orderedStudents, scoreMap) {
   for (let qi = 0; qi < t.questions.length; qi++) {
     const q = t.questions[qi]
