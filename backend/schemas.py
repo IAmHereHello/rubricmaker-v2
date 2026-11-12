@@ -1,5 +1,5 @@
 from pydantic import BaseModel, field_validator
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Dict
 from datetime import datetime
 
 
@@ -137,10 +137,14 @@ class SessionListOut(BaseModel):
     dismissed_inhalers: List[int] = []
     applicable_routes: List[str] = []
     grading_mode: str = "horizontal"
+    student_routes: Dict[int, str] = {}   # route per student in this session, where it differs from the current one
 
 class SessionOrderUpdate(BaseModel):
     student_order: List[int]
     stack_closed: Optional[bool] = None
+
+class StudentRouteUpdate(BaseModel):
+    route: Literal["oranje", "geel", "blauw"]
 
 class SessionModeUpdate(BaseModel):
     grading_mode: Literal["horizontal", "vertical"]

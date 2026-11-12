@@ -5,7 +5,7 @@ import RouteBadge from '../components/RouteBadge.jsx'
 import CijferInput from '../components/CijferInput.jsx'
 import StarInput from '../components/StarInput.jsx'
 import { pyramidLabel } from '../constants.js'
-import { displayCijfer, formatCijfer, calcCijfer, shiftCijfer, formatCijferFormula, gradeLabel, computeGrade } from '../utils/gradingLogic.js'
+import { displayCijfer, formatCijfer, calcCijfer, shiftCijfer, formatCijferFormula, gradeLabel, computeGrade, withSessionRoutes } from '../utils/gradingLogic.js'
 
 const GRADE_OPTIONS = [
   { value: 'expert',         label: 'Expert' },
@@ -64,8 +64,9 @@ export default function Review() {
         for (const g of grades) gm[g.student_id] = { grade: g.grade, is_manual: g.is_manual, review_done: g.review_done, stars: g.stars || 0 }
         setGradeMap(gm)
 
+        const sessStuds = withSessionRoutes(studs, sess)
         const ordered = (sess.student_order || [])
-          .map(sid => studs.find(s => s.id === sid))
+          .map(sid => sessStuds.find(s => s.id === sid))
           .filter(Boolean)
 
         setSession(sess)

@@ -15,6 +15,8 @@ import {
   gradeExplanation,
   hasPostQ1Scores,
   needsRestEntry,
+  withSessionRoutes,
+  routeSwitchEffect,
 } from '../utils/gradingLogic.js'
 
 const orangeQ1 = { id: 1, routes: ['oranje'], max_score: 10 }
@@ -251,5 +253,49 @@ describe('switching per leerling -> per vraag', () => {
   test('no scores beyond vraag 1 is the normal vraag 1 entry, not rest entry', () => {
     const sess = { student_order: [10], stack_closed: false }
     expect(needsRestEntry(sess, t, studs, { '1-10': { points: 2 } })).toBe(false)
+  })
+})
+
+// ── Route switch helpers ─────────────────────────────────────────────────────
+
+describe('withSessionRoutes', () => {
+  const studs = [{ id: 1, route: 'geel' }, { id: 2, route: 'oranje' }]
+  test('uses the route a session kept from before a change', () => {
+    const out = withSessionRoutes(studs, { student_routes: { 1: 'oranje' } })
+    expect(out.map(s => s.route)).toEqual(['oranje', 'oranje'])
+    expect(studs[0].route).toBe('geel')
+  })
+  test('keeps current routes without overrides', () => {
+    expect(withSessionRoutes(studs, {}).map(s => s.route)).toEqual(['geel', 'oranje'])
+    expect(withSessionRoutes(studs, null).map(s => s.route)).toEqual(['geel', 'oranje'])
+  })
+})
+
+describe('routeSwitchEffect', () => {
+  const t = { questions: [
+    { id: 10, routes: ['oranje'] },
+    { id: 11, routes: ['oranje', 'geel'] },
+    { id: 12, routes: ['geel'] },
+  ] }
+  const s = { id: 1, route: 'oranje' }
+  test('hides points outside the new route and restores hidden points of it', () => {
+    const scores = {
+      '10-1': { points: 2, excluded: false },
+      '11-1': { points: 1, excluded: false },
+      '12-1': { points: 3, excluded: true },
+    }
+    const eff = routeSwitchEffect(t, s, 'geel', scores)
+    expect(eff.hide.map(h => h.question.id)).toEqual([10])
+    expect(eff.restore.map(r => r.question.id)).toEqual([12])
+    expect(eff.questionCount).toBe(2)
+  })
+  test('ignores empty and n.v.t. scores without points', () => {
+    const scores = { '10-1': { points: null, excluded: true }, '12-1': { points: null, excluded: true } }
+    const eff = routeSwitchEffect(t, s, 'geel', scores)
+    expect(eff.hide).toEqual([])
+    expect(eff.restore).toEqual([])
+  })
+  test('counts zero questions for a route without questions', () => {
+    expect(routeSwitchEffect(t, s, 'blauw', {}).questionCount).toBe(0)
   })
 })

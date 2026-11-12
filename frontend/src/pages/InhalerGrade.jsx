@@ -5,7 +5,7 @@ import RouteBadge from '../components/RouteBadge.jsx'
 import CijferInput from '../components/CijferInput.jsx'
 import StarInput from '../components/StarInput.jsx'
 import { pyramidLabel } from '../constants.js'
-import { isApplicableForQuestion, displayCijfer, formatCijfer, calcCijfer, shiftCijfer, formatCijferFormula, gradeLabel, computeGrade } from '../utils/gradingLogic.js'
+import { isApplicableForQuestion, displayCijfer, formatCijfer, calcCijfer, shiftCijfer, formatCijferFormula, gradeLabel, computeGrade, withSessionRoutes } from '../utils/gradingLogic.js'
 
 const GRADE_OPTIONS = [
   { value: 'expert',          label: 'Expert' },
@@ -54,7 +54,7 @@ export default function InhalerGrade() {
         const sm = {}
         for (const s of sc) sm[`${s.question_id}-${s.student_id}`] = s
 
-        const stud = studs.find(s => s.id === parseInt(studentId))
+        const stud = withSessionRoutes(studs, sess).find(s => s.id === parseInt(studentId))
         if (!stud) { setError('Leerling niet gevonden.'); return }
 
         setSession(sess)

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import * as api from '../api.js'
 import RouteBadge from '../components/RouteBadge.jsx'
+import { withSessionRoutes } from '../utils/gradingLogic.js'
 
 export default function Inhalers() {
   const [sessions, setSessions] = useState([])
@@ -32,7 +33,7 @@ export default function Inhalers() {
   const sessionsWithInhalers = useMemo(() => {
     return sessions
       .map(sess => {
-        const classStudents = studentsByClass[sess.class_name] || []
+        const classStudents = withSessionRoutes(studentsByClass[sess.class_name] || [], sess)
         const inOrder = new Set(sess.student_order || [])
         const dismissed = new Set(sess.dismissed_inhalers || [])
         const applicableRoutes = new Set(sess.applicable_routes || [])

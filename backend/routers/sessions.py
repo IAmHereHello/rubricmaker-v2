@@ -4,7 +4,9 @@ from typing import List
 
 from ..database import get_db
 from ..models import Session as SessionModel, Score, Test as TestModel, Student as StudentModel, StudentGrade
-from ..schemas import SessionCreate, SessionOut, SessionListOut, SessionOrderUpdate, SessionModeUpdate, InhalerDismissBody
+from ..models import SessionStudentRoute
+from ..route_history import change_student_route, session_route_overrides
+from ..schemas import SessionCreate, SessionOut, SessionListOut, SessionOrderUpdate, SessionModeUpdate, InhalerDismissBody, StudentRouteUpdate
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -18,6 +20,7 @@ def list_sessions(db: DBSession = Depends(get_db)):
         order = s.student_order or []
 
         mode = s.grading_mode or "horizontal"
+        overrides = session_route_overrides(db, s.id)
         # While the stack is still open the expected total covers the whole class, so a
         # fully graded stack does not make the session look complete.
         count_ids = order
@@ -29,7 +32,7 @@ def list_sessions(db: DBSession = Depends(get_db)):
             graded = 0
         else:
             stud_rows = db.query(StudentModel).filter(StudentModel.id.in_(count_ids)).all()
-            route_map = {st.id: st.route for st in stud_rows}
+            route_map = {st.id: overrides.get(st.id, st.route) for st in stud_rows}
             questions = test.questions if test else []
             total = sum(
                 sum(1 for sid in count_ids if route_map.get(sid) in (q.routes or []))
@@ -70,6 +73,7 @@ def list_sessions(db: DBSession = Depends(get_db)):
             dismissed_inhalers=s.dismissed_inhalers or [],
             applicable_routes=applicable_routes,
             grading_mode=mode,
+            student_routes=overrides,
         ))
     return result
 
@@ -100,6 +104,7 @@ def get_session(id: int, db: DBSession = Depends(get_db)):
         "dismissed_inhalers": obj.dismissed_inhalers or [],
         "grading_mode": obj.grading_mode or "horizontal",
         "stack_closed": bool(obj.stack_closed),
+        "student_routes": session_route_overrides(db, id),
         "scores": [
             {
                 "id": s.id,
@@ -139,6 +144,43 @@ def set_grading_mode(id: int, body: SessionModeUpdate, db: DBSession = Depends(g
     return obj
 
 
+@router.put("/{id}/student/{student_id}/route")
+def switch_student_route(id: int, student_id: int, body: StudentRouteUpdate, db: DBSession = Depends(get_db)):
+    """Switch a student's route while grading: permanent from this test on, earlier tests keep theirs."""
+    obj = db.query(SessionModel).filter(SessionModel.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Sessie niet gevonden")
+    student = db.query(StudentModel).filter(StudentModel.id == student_id).first()
+    if not student:
+        raise HTTPException(404, "Student niet gevonden")
+    old_route = session_route_overrides(db, id).get(student.id, student.route)
+    change_student_route(db, student, body.route, from_session_id=id)
+
+    # A grade already given in this test no longer fits the new route: remove it so it is
+    # calculated again (and reviewed again). The frontend warns about this.
+    grade_reset = None
+    if old_route != body.route:
+        grade = db.query(StudentGrade).filter(
+            StudentGrade.session_id == id, StudentGrade.student_id == student.id
+        ).first()
+        if grade:
+            grade_reset = {
+                "grade": grade.grade,
+                "is_manual": bool(grade.is_manual),
+                "review_done": bool(grade.review_done),
+                "stars": grade.stars or 0,
+            }
+            db.delete(grade)
+
+    db.commit()
+    db.refresh(student)
+    return {
+        "student": {"id": student.id, "name": student.name, "class_name": student.class_name, "route": student.route},
+        "student_routes": session_route_overrides(db, id),
+        "grade_reset": grade_reset,
+    }
+
+
 @router.post("/{id}/dismiss-inhaler")
 def dismiss_inhaler(id: int, body: InhalerDismissBody, db: DBSession = Depends(get_db)):
     obj = db.query(SessionModel).filter(SessionModel.id == id).first()
@@ -159,6 +201,7 @@ def delete_session(id: int, db: DBSession = Depends(get_db)):
         raise HTTPException(404, "Sessie niet gevonden")
     db.query(Score).filter(Score.session_id == id).delete()
     db.query(StudentGrade).filter(StudentGrade.session_id == id).delete()
+    db.query(SessionStudentRoute).filter(SessionStudentRoute.session_id == id).delete()
     db.delete(obj)
     db.commit()
     return {"ok": True}

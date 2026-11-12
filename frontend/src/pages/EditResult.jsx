@@ -12,6 +12,7 @@ import {
   formatCijferFormula,
   gradeLabel,
   computeGrade,
+  withSessionRoutes,
 } from '../utils/gradingLogic.js'
 
 const GRADE_OPTIONS = [
@@ -58,7 +59,7 @@ export default function EditResult() {
           api.getSessionGrades(id),
         ])
         const [t, studs] = await Promise.all([api.getTest(sess.test_id), api.getStudents(sess.class_name)])
-        const stud = studs.find(s => s.id === sid)
+        const stud = withSessionRoutes(studs, sess).find(s => s.id === sid)
         if (!stud) { setError('Leerling niet gevonden in deze klas.'); return }
 
         const byQ = {}

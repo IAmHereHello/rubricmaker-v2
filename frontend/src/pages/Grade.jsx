@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
-import RouteBadge from '../components/RouteBadge.jsx'
+import RoutePicker from '../components/RoutePicker.jsx'
 import { pyramidLabel } from '../constants.js'
 import {
   isApplicableForQuestion,
@@ -15,6 +15,10 @@ import {
   findStaleScores,
   hasPostQ1Scores,
   needsRestEntry,
+  isMissingScore,
+  withSessionRoutes,
+  routeSwitchEffect,
+  gradeLabel,
 } from '../utils/gradingLogic.js'
 
 export default function Grade() {
@@ -40,6 +44,14 @@ export default function Grade() {
   // Horizontal mode: missed { qIdx, studentId } pairs to catch up on at the end
   const [fixQueue, setFixQueue] = useState(null)
   const [fixPos, setFixPos] = useState(0)
+  // Set while catching up on a switched student's earlier questions (per vraag):
+  // { qIdx, studentId, name, qIdxs } = where to continue afterwards
+  const [fixReturn, setFixReturn] = useState(null)
+  // Route switch in the grading screen
+  const [routeBusy, setRouteBusy] = useState(false)
+  const [routeNotice, setRouteNotice] = useState('')
+  // Routes this session keeps from before a route change ({ studentId: route })
+  const routeOverridesRef = useRef({})
   // Vertical mode: missed questions already sent back to once (not again if left empty)
   const revisitedRef = useRef(new Set())
   const scoreInputRef = useRef(null)
@@ -78,7 +90,8 @@ export default function Grade() {
         const scoreMap = {}
         for (const s of sc) scoreMap[`${s.question_id}-${s.student_id}`] = s
 
-        const sortedStuds = [...studs].sort((a, b) => a.name.localeCompare(b.name, 'nl'))
+        routeOverridesRef.current = sess.student_routes || {}
+        const sortedStuds = withSessionRoutes(studs, sess).sort((a, b) => a.name.localeCompare(b.name, 'nl'))
 
         setSession(sess)
         setTest(t)
@@ -104,6 +117,7 @@ export default function Grade() {
     setVName('')
     setFixQueue(null)
     setFixPos(0)
+    setFixReturn(null)
     setQIdx(0)
     setSIdx(0)
     setDone(false)
@@ -316,7 +330,10 @@ export default function Grade() {
   // Routes can be changed on the Leerlingen page while grading; reload them at each checkpoint.
   async function refreshStudents() {
     try {
-      const fresh = (await api.getStudents(session.class_name)).sort((a, b) => a.name.localeCompare(b.name, 'nl'))
+      const fresh = withSessionRoutes(
+        await api.getStudents(session.class_name),
+        { student_routes: routeOverridesRef.current },
+      ).sort((a, b) => a.name.localeCompare(b.name, 'nl'))
       setStudents(fresh)
       return fresh
     } catch {
@@ -682,7 +699,14 @@ export default function Grade() {
     await persistScore()
     if (fixQueue) {
       setFixQueue(null)
-      setDone(true)
+      if (fixReturn) {
+        // Done with the switched student's earlier questions: continue where we were
+        const ret = fixReturn
+        setFixReturn(null)
+        await resumeAt(ret, await refreshStudents())
+      } else {
+        setDone(true)
+      }
       return
     }
     if (isVertical) {
@@ -690,10 +714,14 @@ export default function Grade() {
       return
     }
     const fresh = await refreshStudents()
-    const orderedStudents = getOrderedStudents(session, fresh)
-    await createExcludedScores(currentQuestion, orderedStudents)
+    await advanceFrom(qIdx, getOrderedStudents(session, fresh))
+  }
 
-    let nextQIdx = qIdx + 1
+  // Per vraag: leave question `fromIdx` and open the next question that has students.
+  async function advanceFrom(fromIdx, orderedStudents) {
+    await createExcludedScores(test.questions[fromIdx], orderedStudents)
+
+    let nextQIdx = fromIdx + 1
     const skippedIndices = []
 
     // Skip any questions whose routes exclude every student in the current stack.
@@ -725,6 +753,156 @@ export default function Grade() {
     }
     setQIdx(nextQIdx)
     setSIdx(0)
+  }
+
+  // ── Route switch ─────────────────────────────────────────────────────────────
+  // Texts for the confirmation in the route picker.
+  function describeRouteSwitch(student, newRoute) {
+    const { hide, questionCount } = routeSwitchEffect(test, student, newRoute, scoresRef.current)
+    const info = {}
+    if (questionCount === 0) {
+      info.block = `Deze toets heeft geen vragen voor route ${newRoute}. Als je toch wisselt, wordt ${student.name} bij deze toets overgeslagen.`
+    }
+    if (hide.length) {
+      info.confirm = `${hide.length === 1 ? '1 ingevulde score wordt' : `${hide.length} ingevulde scores worden`} n.v.t. De punten blijven bewaard en komen terug als je later terugwisselt.`
+    }
+    return info
+  }
+
+  // Switch a student's route from the grading screen: permanent from this test on.
+  async function handleRouteSwitch(student, newRoute) {
+    if (routeBusy || student.route === newRoute) return
+    setRouteBusy(true)
+    setError('')
+    try {
+      const inStack = !q1Mode && (session.student_order || []).includes(student.id)
+      if (inStack) await persistScore()
+
+      const res = await api.switchStudentRoute(id, student.id, newRoute)
+      routeOverridesRef.current = res.student_routes || {}
+      const switched = { ...student, route: newRoute }
+
+      if (res.grade_reset) {
+        const g = res.grade_reset
+        const stars = g.stars ? ` De ${g.stars === 1 ? '1 sterretje' : `${g.stars} sterretjes`} moet je opnieuw geven.` : ''
+        setRouteNotice(
+          `Let op: ${student.name} had al een ${g.is_manual ? 'handmatig gekozen ' : ''}beoordeling (${gradeLabel(g.grade)}) voor deze toets. ` +
+          `Die wordt opnieuw berekend met route ${newRoute}; controleer hem bij het beoordelen.${stars}`
+        )
+      }
+
+      if (inStack) {
+        // Hidden points of the new route count again; points outside it become n.v.t.
+        const { hide, restore } = routeSwitchEffect(test, student, newRoute, scoresRef.current)
+        for (const { question, score } of restore) await saveExcluded(question, student, score, false)
+        for (const { question, score } of hide) await saveExcluded(question, student, score, true)
+        await createExcludedForStudent(switched)
+      }
+
+      const studs = students.map(s => (s.id === student.id ? switched : s))
+      setStudents(studs)
+      setSession(s => ({ ...s, student_routes: res.student_routes || {} }))
+
+      if (inStack) await repositionAfterSwitch(switched, studs)
+    } catch {
+      setError('Route wijzigen mislukt.')
+    } finally {
+      setRouteBusy(false)
+    }
+  }
+
+  async function saveExcluded(question, student, score, excluded) {
+    const saved = await api.upsertScore({
+      session_id: parseInt(id),
+      student_id: student.id,
+      question_id: question.id,
+      points: score.points,
+      excluded,
+      comment: score.comment ?? null,
+    })
+    putScore(scoreKey(question.id, student.id), saved)
+  }
+
+  // After a switch: go to the questions of the new route that the student still needs.
+  async function repositionAfterSwitch(student, studs) {
+    const order = session.student_order || []
+    const stack = getOrderedStudents(session, studs)
+    const missingFor = qi => isMissingScore(scoresRef.current[scoreKey(test.questions[qi].id, student.id)])
+    const indices = getApplicableQuestionIndices(test, student)
+
+    if (isVertical && !fixQueue) {
+      if (!indices.length) {
+        setSkipNotice(`${student.name} heeft geen vragen voor route ${student.route} en is overgeslagen.`)
+        await finishVStudent(student, order)
+        return
+      }
+      const firstMissing = indices.findIndex(missingFor)
+      if (firstMissing >= 0) {
+        setVPos(firstMissing)
+        if (indices[firstMissing] < curQIdx) setSkipNotice(`Route gewijzigd: eerst vraag ${indices[firstMissing] + 1}, die hoort bij route ${student.route}.`)
+      } else {
+        const here = indices.indexOf(curQIdx)
+        setVPos(here >= 0 ? here : indices.length - 1)
+      }
+      return
+    }
+
+    // Per vraag. Where to continue after catching up: this question, with this student if
+    // the question is in the new route, otherwise with the next student in the stack.
+    const baseQIdx = fixReturn ? fixReturn.qIdx : fixQueue ? null : qIdx
+    if (baseQIdx === null) {
+      // Catching up at the end of the stack: rebuild the list of open questions
+      const missing = findMissingScores(test, stack, scoresRef.current)
+      if (!missing.length) {
+        setFixQueue(null)
+        setDone(true)
+      } else {
+        setFixQueue(missing)
+        setFixPos(Math.max(0, missing.findIndex(m => m.studentId === student.id)))
+      }
+      return
+    }
+
+    let ret
+    if (fixReturn) {
+      ret = fixReturn
+    } else {
+      const q = test.questions[baseQIdx]
+      let studentId = null
+      if (isApplicableForQuestion(student, q)) {
+        studentId = student.id
+      } else {
+        const after = order.slice(order.indexOf(student.id) + 1)
+        const next = after.map(sid => studs.find(s => s.id === sid)).find(s => s && isApplicableForQuestion(s, q))
+        studentId = next ? next.id : null
+      }
+      ret = { qIdx: baseQIdx, studentId }
+    }
+
+    const earlier = indices.filter(qi => qi < baseQIdx && missingFor(qi))
+    if (earlier.length) {
+      setFixReturn({ ...ret, name: student.name, qIdxs: earlier })
+      setFixQueue(earlier.map(qi => ({ qIdx: qi, studentId: student.id })))
+      setFixPos(0)
+      return
+    }
+    setFixQueue(null)
+    setFixReturn(null)
+    await resumeAt(ret, studs)
+  }
+
+  // Per vraag: continue at question ret.qIdx with student ret.studentId (or the next question).
+  async function resumeAt(ret, studs) {
+    const stack = getOrderedStudents(session, studs)
+    const q = test.questions[ret.qIdx]
+    const applicable = stack.filter(s => isApplicableForQuestion(s, q))
+    const pos = ret.studentId != null ? applicable.findIndex(s => s.id === ret.studentId) : -1
+    if (pos >= 0) {
+      setQIdx(ret.qIdx)
+      setSIdx(pos)
+      return
+    }
+    await advanceFrom(ret.qIdx, stack)
   }
 
   // ── Previous scores for sidebar ──────────────────────────────────────────────
@@ -787,6 +965,7 @@ export default function Grade() {
             {skipNotice}
           </div>
         )}
+        <RouteNotice text={routeNotice} onClose={() => setRouteNotice('')} />
 
         <div style={{ background: '#e0e3ea', borderRadius: 6, height: 6, marginBottom: 20 }}>
           <div style={{
@@ -830,7 +1009,13 @@ export default function Grade() {
               {vSelectedStudent && (
                 <div className="grade-score-row">
                   <span style={{ fontSize: 16, fontWeight: 700, color: '#1e3a5f' }}>{vSelectedStudent.name}</span>
-                  <RouteBadge route={vSelectedStudent.route} />
+                  <RoutePicker
+                    route={vSelectedStudent.route}
+                    studentName={vSelectedStudent.name}
+                    describe={r => describeRouteSwitch(vSelectedStudent, r)}
+                    onSwitch={r => handleRouteSwitch(vSelectedStudent, r)}
+                    busy={routeBusy}
+                  />
                   <button className="btn btn-primary" onClick={handleVPick} disabled={vBusy}>
                     {vBusy ? 'Laden…' : 'Start nakijken →'}
                   </button>
@@ -908,6 +1093,7 @@ export default function Grade() {
     return (
       <div className="page" style={{ maxWidth: 1040, marginLeft: 'auto', marginRight: 'auto' }}>
         {error && <div className="alert alert-error">{error}</div>}
+        <RouteNotice text={routeNotice} onClose={() => setRouteNotice('')} />
 
         {isRestEntry && (
           <div className="alert" style={{ background: '#e8f0fc', border: '1px solid #b6cdf2', borderRadius: 6, padding: '10px 14px', marginBottom: 12, color: '#1e3a5f' }}>
@@ -974,7 +1160,13 @@ export default function Grade() {
                   <span style={{ fontSize: 16, fontWeight: 700, color: '#1e3a5f' }}>
                     {q1SelectedStudent.name}
                   </span>
-                  <RouteBadge route={q1SelectedStudent.route} />
+                  <RoutePicker
+                    route={q1SelectedStudent.route}
+                    studentName={q1SelectedStudent.name}
+                    describe={r => describeRouteSwitch(q1SelectedStudent, r)}
+                    onSwitch={r => handleRouteSwitch(q1SelectedStudent, r)}
+                    busy={routeBusy}
+                  />
                   {q1IsApplicable ? (
                     <>
                       <input
@@ -1128,10 +1320,13 @@ export default function Grade() {
           {skipNotice}
         </div>
       )}
+      <RouteNotice text={routeNotice} onClose={() => setRouteNotice('')} />
 
       {fixQueue && (
         <div className="alert" style={{ background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 6, padding: '10px 14px', marginBottom: 12, color: '#856404' }}>
-          Nog {fixQueue.length === 1 ? '1 vraag' : `${fixQueue.length} vragen`} open, bijvoorbeeld omdat een route is gewijzigd. Kijk deze eerst na.
+          {fixReturn
+            ? `Route van ${fixReturn.name} gewijzigd: eerst ${questionList(fixReturn.qIdxs)} van de nieuwe route, daarna ga je verder waar je was.`
+            : `Nog ${fixQueue.length === 1 ? '1 vraag' : `${fixQueue.length} vragen`} open, bijvoorbeeld omdat een route is gewijzigd. Kijk deze eerst na.`}
         </div>
       )}
 
@@ -1153,10 +1348,16 @@ export default function Grade() {
         <div className="grade-main">
           <div className="grade-student-name">{currentStudent.name}</div>
           <div style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
-            <RouteBadge route={currentStudent.route} />
+            <RoutePicker
+              route={currentStudent.route}
+              studentName={currentStudent.name}
+              describe={r => describeRouteSwitch(currentStudent, r)}
+              onSwitch={r => handleRouteSwitch(currentStudent, r)}
+              busy={routeBusy || saving}
+            />
             <span className="grade-progress">
               {fixQueue
-                ? `Inhalen: ${fixPos + 1} van ${fixQueue.length} — Vraag ${curQIdx + 1}`
+                ? `${fixReturn ? 'Nieuwe route' : 'Inhalen'}: ${fixPos + 1} van ${fixQueue.length} — Vraag ${curQIdx + 1}`
                 : isVertical
                 ? `Vraag ${curQIdx + 1} van ${test.questions.length} — Leerling ${(session.student_order || []).indexOf(currentStudent.id) + 1} van ${session.stack_closed ? (session.student_order || []).length : students.length}`
                 : `Vraag ${qIdx + 1} van ${test.questions.length} — Leerling ${sIdx + 1} van ${applicableStudents.length}`}
@@ -1254,7 +1455,7 @@ export default function Grade() {
 
             {!isVertical && isLastStudent && isLastQuestion && (
               <button className="btn btn-primary" onClick={handleNextQuestion}>
-                Afronden ✓
+                {fixReturn ? 'Verder waar je was →' : 'Afronden ✓'}
               </button>
             )}
           </div>
@@ -1324,6 +1525,18 @@ export default function Grade() {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Warning after a route switch (stays until closed) ───────────────────────────
+
+function RouteNotice({ text, onClose }) {
+  if (!text) return null
+  return (
+    <div className="alert" style={{ background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 6, padding: '10px 14px', marginBottom: 12, color: '#856404', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+      <span style={{ flex: 1 }}>{text}</span>
+      <button type="button" onClick={onClose} aria-label="Sluiten" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#856404', fontSize: 16, lineHeight: 1 }}>×</button>
     </div>
   )
 }

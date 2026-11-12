@@ -9,7 +9,7 @@ from ..database import get_db
 from ..models import (
     Student, Score, Question,
     Session as SessionModel, StudentGrade,
-    StudentYearSnapshot, Test,
+    StudentYearSnapshot, Test, SessionStudentRoute,
 )
 from ..schemas import SchoolYearAdvanceRequest
 
@@ -127,6 +127,12 @@ def export_csv(db: DBSession = Depends(get_db)):
         .all()
     )
 
+    # Route per session: a session graded before a route change keeps the old route.
+    overrides = {
+        (r.session_id, r.student_id): r.route
+        for r in db.query(SessionStudentRoute).all()
+    }
+
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
@@ -139,7 +145,7 @@ def export_csv(db: DBSession = Depends(get_db)):
             session.class_name,
             test.name,
             student.name,
-            student.route,
+            overrides.get((session.id, student.id), student.route),
             question.order + 1,
             question.domain or "",
             question.pyramid_level,
@@ -196,6 +202,7 @@ def advance_school_year(body: SchoolYearAdvanceRequest, db: DBSession = Depends(
     # Delete all sessions and their dependent rows
     db.query(Score).delete(synchronize_session=False)
     db.query(StudentGrade).delete(synchronize_session=False)
+    db.query(SessionStudentRoute).delete(synchronize_session=False)
     db.query(SessionModel).delete(synchronize_session=False)
 
     # Delete non-continuing students
