@@ -138,6 +138,11 @@ class SessionListOut(BaseModel):
     applicable_routes: List[str] = []
     grading_mode: str = "horizontal"
     student_routes: Dict[int, str] = {}   # route per student in this session, where it differs from the current one
+    # Grote opdracht
+    is_opdracht: bool = False
+    opdracht_done: bool = False
+    opdracht_complete_count: int = 0
+    opdracht_inhalers: List[dict] = []
 
 class SessionOrderUpdate(BaseModel):
     student_order: List[int]

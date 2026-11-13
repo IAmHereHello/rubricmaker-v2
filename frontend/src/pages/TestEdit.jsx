@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import * as api from '../api.js'
 import { PYRAMID_LEVELS, pyramidLabel, DOMAINS } from '../constants.js'
 import { getCijferConfig } from '../utils/gradingLogic.js'
+import OpdrachtEdit from './OpdrachtEdit.jsx'
 
 const ROUTES_ALL = ['oranje', 'geel', 'blauw']
 const EMPTY_Q = { description: '', answer: '', max_score: 1, routes: ['oranje', 'geel', 'blauw'], domain: DOMAINS[0], pyramid_level: PYRAMID_LEVELS[0].value, learning_goal: '', learning_goal_threshold: '' }
@@ -187,6 +188,7 @@ export default function TestEdit() {
   }
 
   if (!test) return <div className="page"><p>Laden...</p></div>
+  if (test.grading_method === 'opdracht') return <OpdrachtEdit initialTest={test} />
 
   const levelClass = (l) => `level-pill level-${l}`
 

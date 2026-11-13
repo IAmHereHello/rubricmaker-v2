@@ -6,6 +6,7 @@ from ..database import get_db
 from ..models import Student
 from ..route_history import change_student_route
 from ..schemas import StudentCreate, StudentUpdate, StudentOut, StudentImport
+from .. import opdracht_logic
 
 router = APIRouter(prefix="/students", tags=["students"])
 
@@ -63,6 +64,7 @@ def update_student(id: int, student: StudentUpdate, db: Session = Depends(get_db
         # Tests the student was already graded on keep the old route.
         change_student_route(db, obj, new_route)
     db.commit()
+    opdracht_logic.sync_student(db, obj.id)
     db.refresh(obj)
     return obj
 

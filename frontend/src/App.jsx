@@ -16,6 +16,9 @@ import SessionReport from './pages/SessionReport.jsx'
 import Inhalers from './pages/Inhalers.jsx'
 import InhalerGrade from './pages/InhalerGrade.jsx'
 import SchoolYearWizard from './pages/SchoolYearWizard.jsx'
+import OpdrachtGrade from './pages/OpdrachtGrade.jsx'
+import OpdrachtReport from './pages/OpdrachtReport.jsx'
+import OpdrachtSwitch from './components/OpdrachtSwitch.jsx'
 import * as api from './api.js'
 
 export default function App() {
@@ -76,15 +79,15 @@ export default function App() {
         <Route path="/tests" element={<TestList />} />
         <Route path="/tests/:id/edit" element={<TestEdit />} />
         <Route path="/sessions/new" element={<SessionNew />} />
-        <Route path="/sessions/:id/grade" element={<Grade />} />
-        <Route path="/sessions/:id/review" element={<Review />} />
-        <Route path="/sessions/:id/edit/:studentId" element={<EditResult />} />
+        <Route path="/sessions/:id/grade" element={<OpdrachtSwitch normal={Grade} opdracht={OpdrachtGrade} />} />
+        <Route path="/sessions/:id/review" element={<OpdrachtSwitch normal={Review} redirect={p => `/reports/session/${p.id}?view=results`} />} />
+        <Route path="/sessions/:id/edit/:studentId" element={<OpdrachtSwitch normal={EditResult} redirect={p => `/sessions/${p.id}/grade?student=${p.studentId}&from=report`} />} />
         <Route path="/classes/:class_name/overview" element={<ClassOverview />} />
         <Route path="/classes/:class_name/radar" element={<ClassRadar />} />
         <Route path="/inhalers" element={<Inhalers />} />
-        <Route path="/sessions/:id/inhaler/:studentId" element={<InhalerGrade />} />
+        <Route path="/sessions/:id/inhaler/:studentId" element={<OpdrachtSwitch normal={InhalerGrade} redirect={p => `/sessions/${p.id}/grade?student=${p.studentId}&from=inhalers`} />} />
         <Route path="/reports" element={<ReportHome />} />
-        <Route path="/reports/session/:id" element={<SessionReport />} />
+        <Route path="/reports/session/:id" element={<OpdrachtSwitch normal={SessionReport} opdracht={OpdrachtReport} />} />
       </Routes>
 
       {wizardOpen && schoolYearStatus && (

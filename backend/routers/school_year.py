@@ -10,6 +10,7 @@ from ..models import (
     Student, Score, Question,
     Session as SessionModel, StudentGrade,
     StudentYearSnapshot, Test, SessionStudentRoute,
+    OpdrachtGroupScore, OpdrachtGroup, OpdrachtEntry, OpdrachtScore, OpdrachtSessionState,
 )
 from ..schemas import SchoolYearAdvanceRequest
 
@@ -203,6 +204,8 @@ def advance_school_year(body: SchoolYearAdvanceRequest, db: DBSession = Depends(
     db.query(Score).delete(synchronize_session=False)
     db.query(StudentGrade).delete(synchronize_session=False)
     db.query(SessionStudentRoute).delete(synchronize_session=False)
+    for model in (OpdrachtGroupScore, OpdrachtGroup, OpdrachtEntry, OpdrachtScore, OpdrachtSessionState):
+        db.query(model).delete(synchronize_session=False)
     db.query(SessionModel).delete(synchronize_session=False)
 
     # Delete non-continuing students

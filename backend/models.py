@@ -16,6 +16,8 @@ class Student(Base):
     grades = relationship("StudentGrade", back_populates="student", cascade="all, delete-orphan")
     year_snapshots = relationship("StudentYearSnapshot", back_populates="student", cascade="all, delete-orphan")
     session_routes = relationship("SessionStudentRoute", back_populates="student", cascade="all, delete-orphan")
+    opdracht_entries = relationship("OpdrachtEntry", cascade="all, delete-orphan")
+    opdracht_scores = relationship("OpdrachtScore", cascade="all, delete-orphan")
 
 
 class Test(Base):
@@ -69,6 +71,10 @@ class Session(Base):
     scores = relationship("Score", back_populates="session", cascade="all, delete-orphan")
     grades = relationship("StudentGrade", back_populates="session", cascade="all, delete-orphan")
     student_routes = relationship("SessionStudentRoute", back_populates="session", cascade="all, delete-orphan")
+    opdracht_state = relationship("OpdrachtSessionState", cascade="all, delete-orphan", uselist=False)
+    opdracht_groups = relationship("OpdrachtGroup", cascade="all, delete-orphan")
+    opdracht_entries = relationship("OpdrachtEntry", cascade="all, delete-orphan")
+    opdracht_scores = relationship("OpdrachtScore", cascade="all, delete-orphan")
 
 
 class SessionStudentRoute(Base):
@@ -131,3 +137,67 @@ class StudentYearSnapshot(Base):
     created_at = Column(DateTime, server_default=func.now())
 
     student = relationship("Student", back_populates="year_snapshots")
+
+
+# ── Grote opdracht ─────────────────────────────────────────────────────────────
+# A Grote opdracht is a Test with grading_method "opdracht". Its rubric (groups of
+# onderdelen with descriptions and points per level) lives in Test.grade_config.
+# The tables below are new, so create_all() adds them; no migration needed.
+
+class OpdrachtSessionState(Base):
+    __tablename__ = "opdracht_session_states"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("sessions.id"), nullable=False, unique=True)
+    mode = Column(String, nullable=True)            # "samen" | "apart" | "individueel" | "groep"
+    group_closed = Column(Boolean, default=False)       # stack of the groepsdeel finished
+    individual_closed = Column(Boolean, default=False)  # stack of the individuele deel finished
+
+
+class OpdrachtGroup(Base):
+    __tablename__ = "opdracht_groups"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("sessions.id"), nullable=False)
+    order = Column(Integer, nullable=False, default=0)
+
+    scores = relationship("OpdrachtGroupScore", cascade="all, delete-orphan")
+
+
+class OpdrachtGroupScore(Base):
+    """Level for an onderdeel of a groepsdeel, shared by every member of the group."""
+    __tablename__ = "opdracht_group_scores"
+    __table_args__ = (UniqueConstraint("group_id", "criterion_id"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    group_id = Column(Integer, ForeignKey("opdracht_groups.id"), nullable=False)
+    criterion_id = Column(String, nullable=False)
+    level = Column(String, nullable=True)     # "niet" | "voldoende" | "goed"
+    comment = Column(String, nullable=True)
+
+
+class OpdrachtEntry(Base):
+    """A student entered for one part (groep or individueel) of a Grote opdracht."""
+    __tablename__ = "opdracht_entries"
+    __table_args__ = (UniqueConstraint("session_id", "student_id", "part"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("sessions.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+    part = Column(String, nullable=False)            # "groep" | "individueel"
+    status = Column(String, nullable=False, default="ingeleverd")  # "ingeleverd" | "niet_ingeleverd"
+    group_id = Column(Integer, ForeignKey("opdracht_groups.id"), nullable=True)
+    order = Column(Integer, nullable=False, default=0)
+
+
+class OpdrachtScore(Base):
+    """Level for one student: an individual onderdeel, or an override of a group level."""
+    __tablename__ = "opdracht_scores"
+    __table_args__ = (UniqueConstraint("session_id", "student_id", "criterion_id"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("sessions.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+    criterion_id = Column(String, nullable=False)
+    level = Column(String, nullable=True)
+    comment = Column(String, nullable=True)

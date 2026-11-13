@@ -4,6 +4,7 @@ from typing import List
 
 from ..database import get_db
 from ..models import Session as SessionModel, Score, Test as TestModel, Student as StudentModel, StudentGrade
+from .. import opdracht_logic
 from ..models import SessionStudentRoute
 from ..route_history import change_student_route, session_route_overrides
 from ..schemas import SessionCreate, SessionOut, SessionListOut, SessionOrderUpdate, SessionModeUpdate, InhalerDismissBody, StudentRouteUpdate
@@ -18,6 +19,10 @@ def list_sessions(db: DBSession = Depends(get_db)):
     for s in sessions:
         test = db.query(TestModel).filter(TestModel.id == s.test_id).first()
         order = s.student_order or []
+
+        if test and test.grading_method == "opdracht":
+            result.append(_opdracht_list_item(db, s, test))
+            continue
 
         mode = s.grading_mode or "horizontal"
         overrides = session_route_overrides(db, s.id)
@@ -76,6 +81,37 @@ def list_sessions(db: DBSession = Depends(get_db)):
             student_routes=overrides,
         ))
     return result
+
+
+def _opdracht_list_item(db, s, test):
+    ctx = opdracht_logic.Context(db, s)
+    sums = opdracht_logic.summaries(ctx)
+    entered = [sid for sid, v in sums.items() if any(p["status"] in ("open", "complete", "missing") for p in v["parts"].values())]
+    complete = [sid for sid, v in sums.items() if v["complete"]]
+    dismissed = set(s.dismissed_inhalers or [])
+    return SessionListOut(
+        id=s.id,
+        test_id=s.test_id,
+        test_name=test.name,
+        class_name=s.class_name,
+        created_at=s.created_at,
+        student_order=entered,
+        graded_count=len(complete),
+        total_count=len(entered),
+        review_count=len(complete),
+        student_count=len(entered),
+        has_grading=True,
+        dismissed_inhalers=list(dismissed),
+        applicable_routes=[],
+        grading_mode=ctx.mode or "opdracht",
+        is_opdracht=True,
+        opdracht_done=opdracht_logic.session_done(ctx, sums),
+        opdracht_complete_count=len(complete),
+        opdracht_inhalers=[
+            {"student_id": sid, "parts": v["inhaler_parts"]}
+            for sid, v in sums.items() if v["inhaler_parts"] and sid not in dismissed
+        ],
+    )
 
 
 @router.post("", response_model=SessionOut)
