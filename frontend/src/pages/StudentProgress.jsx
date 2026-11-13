@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
+import BackButton from '../components/BackButton.jsx'
+import StudentSwitcher from '../components/StudentSwitcher.jsx'
 import RouteBadge from '../components/RouteBadge.jsx'
 import { PYRAMID_LEVELS, pyramidLabel } from '../constants.js'
 import { gradeLabel } from '../utils/gradingLogic.js'
@@ -34,11 +36,24 @@ export default function StudentProgress() {
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
 
+  const [classStudents, setClassStudents] = useState([])
+  const className = data?.student.class_name
+
   useEffect(() => {
+    // `alive`: when switching student quickly, a slow earlier answer must not win
+    let alive = true
     api.getStudentProgress(id)
-      .then(setData)
-      .catch(() => setError('Fout bij laden van voortgang.'))
+      .then(d => { if (alive) { setData(d); setError('') } })
+      .catch(() => { if (alive) setError('Fout bij laden van voortgang.') })
+    return () => { alive = false }
   }, [id])
+
+  useEffect(() => {
+    if (!className) return
+    let alive = true
+    api.getStudents(className).then(l => { if (alive) setClassStudents(l) }).catch(() => {})
+    return () => { alive = false }
+  }, [className])
 
   if (!data) return <div className="page">{error || 'Laden...'}</div>
 
@@ -57,15 +72,15 @@ export default function StudentProgress() {
     <div className="page">
       <div className="page-header">
         <div>
-          <h1>{student.name}</h1>
+          <h1><StudentSwitcher student={student} students={classStudents} page="progress" /></h1>
           <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center' }}>
             <RouteBadge route={student.route} />
             <span className="text-muted">Klas {student.class_name}</span>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <Link to={`/students/${id}/report`} className="btn btn-secondary">Rapport & Radar</Link>
-          <Link to="/students" className="btn btn-secondary">← Terug</Link>
+          <Link to={`/students/${id}/report`} replace className="btn btn-secondary">Rapport & Radar</Link>
+          <BackButton fallback="/students" />
         </div>
       </div>
 

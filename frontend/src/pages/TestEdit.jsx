@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import * as api from '../api.js'
+import BackButton from '../components/BackButton.jsx'
 import { PYRAMID_LEVELS, pyramidLabel, DOMAINS } from '../constants.js'
 import { getCijferConfig } from '../utils/gradingLogic.js'
 import OpdrachtEdit from './OpdrachtEdit.jsx'
@@ -213,7 +214,7 @@ export default function TestEdit() {
             </h1>
           )}
         </div>
-        <Link to="/tests" className="btn btn-secondary">← Terug</Link>
+        <BackButton fallback="/tests" />
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}

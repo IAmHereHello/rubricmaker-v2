@@ -652,3 +652,19 @@ tr:hover td { background: #fafbfd; }
 @media (max-width: 760px) {
   .opd-levels-grid, .opd-btn-row { grid-template-columns: 1fr; }
 }
+
+/* Student name as a dropdown in the page title (Voortgang, Rapport & Radar) */
+.student-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+}
+.student-switcher select {
+  width: auto;
+  max-width: 100%;
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+  padding: 2px 8px;
+}

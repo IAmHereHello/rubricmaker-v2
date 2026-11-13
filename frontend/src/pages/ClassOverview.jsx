@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import * as api from '../api.js'
+import BackButton from '../components/BackButton.jsx'
 import { pyramidLabel } from '../constants.js'
 
 const ROUTES = ['oranje', 'geel', 'blauw']
@@ -33,7 +34,7 @@ export default function ClassOverview() {
         <h1>Klasoverzicht — {class_name}</h1>
         <div style={{ display: 'flex', gap: 10 }}>
           <Link to={`/classes/${class_name}/radar`} className="btn btn-secondary">Radardiagram</Link>
-          <Link to="/students" className="btn btn-secondary">← Terug</Link>
+          <BackButton fallback="/students" />
         </div>
       </div>
 

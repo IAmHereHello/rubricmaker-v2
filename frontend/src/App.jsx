@@ -19,6 +19,7 @@ import SchoolYearWizard from './pages/SchoolYearWizard.jsx'
 import OpdrachtGrade from './pages/OpdrachtGrade.jsx'
 import OpdrachtReport from './pages/OpdrachtReport.jsx'
 import OpdrachtSwitch from './components/OpdrachtSwitch.jsx'
+import { BackTrailTracker } from './components/BackButton.jsx'
 import * as api from './api.js'
 
 export default function App() {
@@ -44,6 +45,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <BackTrailTracker />
       <nav>
         <NavLink to="/students" className="nav-brand">Rubricmaker</NavLink>
         <NavLink to="/students">Leerlingen</NavLink>
