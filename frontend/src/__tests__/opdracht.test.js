@@ -35,7 +35,7 @@ describe('Grote opdracht helpers', () => {
     expect(partsPresent(test)).toEqual(['groep'])
   })
 
-  it('explains a Feedback onderdeel that forces In ontwikkeling', () => {
+  it('explains a verplicht onderdeel that forces In ontwikkeling', () => {
     const text = opdrachtExplanation(test, { name: 'Bram', route: 'geel' }, {
       complete: true, points: 3, max: 4, grade: 'in_ontwikkeling', feedback_failed: ['Staaf'],
     })

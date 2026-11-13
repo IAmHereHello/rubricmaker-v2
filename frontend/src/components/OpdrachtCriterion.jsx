@@ -41,7 +41,7 @@ export default function OpdrachtCriterion({ criterion, routes, selected, comment
         <span style={{ fontWeight: 700, fontSize: 15, color: '#1e3a5f' }}>{criterion.name || 'Naamloos onderdeel'}</span>
         {criterion.feedback && (
           <span title="Niet laten zien bij dit onderdeel betekent altijd In ontwikkeling" style={{ fontSize: 11, background: '#fee2e2', color: '#991b1b', borderRadius: 4, padding: '1px 6px' }}>
-            Feedback
+            Verplicht
           </span>
         )}
         {tag}
