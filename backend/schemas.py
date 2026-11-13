@@ -137,6 +137,11 @@ class SessionListOut(BaseModel):
     dismissed_inhalers: List[int] = []
     applicable_routes: List[str] = []
     grading_mode: str = "horizontal"
+    # Grote opdracht
+    is_opdracht: bool = False
+    opdracht_done: bool = False
+    opdracht_complete_count: int = 0
+    opdracht_inhalers: List[dict] = []
 
 class SessionOrderUpdate(BaseModel):
     student_order: List[int]

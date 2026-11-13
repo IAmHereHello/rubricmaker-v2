@@ -30,6 +30,7 @@ export default function SessionNew() {
   }, [classes.join(',')])
 
   function sessionState(s) {
+    if (s.is_opdracht) return s.opdracht_done ? 'complete' : 'grading'
     if (s.total_count === 0 || s.graded_count < s.total_count) return 'grading'
     if (s.has_grading && s.review_count < s.student_count) return 'review'
     return 'complete'
@@ -80,7 +81,9 @@ export default function SessionNew() {
               {inProgress.map(sess => {
                 const state = sessionState(sess)
                 const notStarted = sess.student_count === 0
-                const progressLabel = state === 'review'
+                const progressLabel = sess.is_opdracht
+                  ? (notStarted ? 'Nog niet gestart' : `${sess.opdracht_complete_count} met eindresultaat`)
+                  : state === 'review'
                   ? `Nakijken klaar – beoordelingsronde (${sess.review_count}/${sess.student_count})`
                   : notStarted
                     ? 'Nog niet gestart'
@@ -92,7 +95,11 @@ export default function SessionNew() {
                 return (
                   <tr key={sess.id}>
                     <td>{new Date(sess.created_at).toLocaleDateString('nl-NL')}</td>
-                    <td>{sess.test_name}{sess.grading_mode === 'vertical' && <span className="text-muted" style={{ fontSize: 12 }}> · per leerling</span>}</td>
+                    <td>
+                      {sess.test_name}
+                      {sess.is_opdracht && <span className="text-muted" style={{ fontSize: 12 }}> · Grote opdracht</span>}
+                      {!sess.is_opdracht && sess.grading_mode === 'vertical' && <span className="text-muted" style={{ fontSize: 12 }}> · per leerling</span>}
+                    </td>
                     <td>{sess.class_name}</td>
                     <td>
                       <span style={{ color: progressColor, fontSize: 13 }}>
@@ -136,6 +143,11 @@ export default function SessionNew() {
             {classes.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
+        {tests.find(t => String(t.id) === testId)?.grading_method === 'opdracht' ? (
+          <div className="text-muted" style={{ fontSize: 13, marginBottom: 24 }}>
+            Grote opdracht: je kiest de manier van nakijken in het volgende scherm.
+          </div>
+        ) : (
         <div className="field" style={{ marginBottom: 24 }}>
           <label>Nakijkvolgorde</label>
           <select value={gradingMode} onChange={e => setGradingMode(e.target.value)}>
@@ -143,6 +155,7 @@ export default function SessionNew() {
             <option value="vertical">Per leerling (A1, A2, A3, B1, B2, …)</option>
           </select>
         </div>
+        )}
         <button className="btn btn-primary" onClick={start} disabled={!testId || !className}>
           Nakijksessie starten →
         </button>

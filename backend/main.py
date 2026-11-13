@@ -4,7 +4,7 @@ from sqlalchemy import text
 
 from .database import engine
 from . import models
-from .routers import students, tests, questions, sessions, scores, progress, reports, grades, school_year
+from .routers import students, tests, questions, sessions, scores, progress, reports, grades, school_year, opdracht
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -62,6 +62,7 @@ app.include_router(progress.router)
 app.include_router(reports.router)
 app.include_router(grades.router)
 app.include_router(school_year.router)
+app.include_router(opdracht.router)
 
 
 @app.get("/")

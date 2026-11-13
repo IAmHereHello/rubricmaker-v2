@@ -203,6 +203,7 @@ export default function StudentProgress() {
                     {sess.grade ? <GradeBadge grade={sess.grade} /> : <span className="text-muted">—</span>}
                   </td>
                   <td>
+                    {sess.is_opdracht && <span style={{ fontSize: 13 }}>Grote opdracht: <strong>{sess.test_name}</strong></span>}
                     {Object.entries(sess.domains).map(([dom, v]) => (
                       <span key={dom} style={{ marginRight: 10, fontSize: 13 }}>
                         <strong>{dom}</strong>: {v.scored}/{v.max}

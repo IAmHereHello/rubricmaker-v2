@@ -5,6 +5,7 @@ from typing import List
 from ..database import get_db
 from ..models import Test
 from ..schemas import TestCreate, TestUpdate, TestOut
+from .. import opdracht_logic
 
 router = APIRouter(prefix="/tests", tags=["tests"])
 
@@ -79,6 +80,9 @@ def update_test(id: int, test: TestUpdate, db: Session = Depends(get_db)):
         obj.grade_config = test.grade_config
     db.commit()
     db.refresh(obj)
+    if obj.grading_method == "opdracht":
+        opdracht_logic.sync_test(db, obj)
+        db.refresh(obj)
     return obj
 
 

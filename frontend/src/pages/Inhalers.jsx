@@ -32,6 +32,14 @@ export default function Inhalers() {
   const sessionsWithInhalers = useMemo(() => {
     return sessions
       .map(sess => {
+        if (sess.is_opdracht) {
+          const dismissedSet = new Set(sess.dismissed_inhalers || [])
+          const byId = Object.fromEntries(students.map(s => [s.id, s]))
+          const absent = (sess.opdracht_inhalers || [])
+            .filter(i => !dismissedSet.has(i.student_id) && byId[i.student_id])
+            .map(i => ({ ...byId[i.student_id], opdrachtParts: i.parts }))
+          return { ...sess, absentStudents: absent }
+        }
         const classStudents = studentsByClass[sess.class_name] || []
         const inOrder = new Set(sess.student_order || [])
         const dismissed = new Set(sess.dismissed_inhalers || [])
@@ -42,7 +50,7 @@ export default function Inhalers() {
         return { ...sess, absentStudents: absent }
       })
       .filter(sess => sess.absentStudents.length > 0)
-  }, [sessions, studentsByClass])
+  }, [sessions, studentsByClass, students])
 
   async function handleDismiss(sessionId, studentId, studentName, testName) {
     try {
@@ -122,6 +130,7 @@ export default function Inhalers() {
                 <tr>
                   <th>Naam</th>
                   <th>Route</th>
+                  {sess.is_opdracht && <th>Deel</th>}
                   <th></th>
                 </tr>
               </thead>
@@ -130,10 +139,17 @@ export default function Inhalers() {
                   <tr key={student.id}>
                     <td style={{ fontWeight: 500 }}>{student.name}</td>
                     <td><RouteBadge route={student.route} /></td>
+                    {sess.is_opdracht && (
+                      <td style={{ fontSize: 13 }}>
+                        {student.opdrachtParts.length === 2 ? 'Alles' : student.opdrachtParts[0] === 'groep' ? 'Gezamenlijk deel' : 'Individueel deel'}
+                      </td>
+                    )}
                     <td>
                       <div style={{ display: 'flex', gap: 8 }}>
                         <Link
-                          to={`/sessions/${sess.id}/inhaler/${student.id}`}
+                          to={sess.is_opdracht
+                            ? `/sessions/${sess.id}/grade?student=${student.id}${student.opdrachtParts.length === 1 ? `&part=${student.opdrachtParts[0]}` : ''}&from=inhalers`
+                            : `/sessions/${sess.id}/inhaler/${student.id}`}
                           className="btn btn-primary btn-sm"
                         >
                           Nakijken →

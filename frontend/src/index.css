@@ -437,3 +437,113 @@ tr:hover td { background: #fafbfd; }
 @media (max-width: 700px) {
   .report-grid-2 { grid-template-columns: 1fr; }
 }
+
+/* ── Grote opdracht ───────────────────────────────────────────────────────── */
+.opd-levels-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.opd-level-col {
+  border: 1px solid #e0e3ea;
+  border-top: 3px solid;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #fbfcfd;
+}
+.opd-savebar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  background: #fff;
+  border-top: 1px solid #e0e3ea;
+  box-shadow: 0 -2px 8px rgba(0,0,0,.06);
+  padding: 12px 0;
+  z-index: 50;
+}
+.opd-part-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin: 22px 0 8px;
+}
+.opd-section-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e3a5f;
+  margin-bottom: 4px;
+}
+.opd-criterion {
+  padding: 14px 0;
+  border-bottom: 1px solid #eef0f4;
+}
+.opd-criterion:last-child { border-bottom: none; padding-bottom: 4px; }
+.opd-btn-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.opd-level-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0;
+  text-align: left;
+  background: #fff;
+  border: 1px solid #d5dae3;
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background .12s, border-color .12s;
+}
+.opd-level-btn:hover:not(:disabled) { background: #f6f8fb; border-color: #9aa6b8; }
+.opd-level-btn.active:hover:not(:disabled) { filter: brightness(0.98); }
+.opd-level-btn:disabled { opacity: .7; cursor: wait; }
+.opd-btn-text {
+  font-size: 13px;
+  color: #444;
+  margin-top: 6px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+.opd-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #1a6ecc;
+  font-size: 13px;
+  cursor: pointer;
+}
+.opd-link:hover { text-decoration: underline; }
+.opd-entered-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-bottom: 8px;
+}
+.opd-entered {
+  padding: 4px 10px;
+  background: #f0f3f8;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.opd-entered:hover { background: #e3e9f2; }
+.opd-choice {
+  display: block;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color .12s, box-shadow .12s;
+}
+.opd-choice:hover:not(:disabled) { border-color: #1e3a5f; box-shadow: 0 2px 8px rgba(30,58,95,.12); }
+@media (max-width: 760px) {
+  .opd-levels-grid, .opd-btn-row { grid-template-columns: 1fr; }
+}

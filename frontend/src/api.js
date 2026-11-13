@@ -108,3 +108,34 @@ export const advanceSchoolYear = (data) =>
   http.post('/school-year/advance', data).then(r => r.data)
 
 export const getSchoolYearExportUrl = () => '/api/school-year/export-csv'
+
+// ── Grote opdracht ────────────────────────────────────────────────────────────
+
+export const getOpdrachtSession = (session_id) =>
+  http.get(`/opdracht/sessions/${session_id}`).then(r => r.data)
+
+export const setOpdrachtState = (session_id, data) =>
+  http.put(`/opdracht/sessions/${session_id}/state`, data).then(r => r.data)
+
+// Returns { group_id, data }; a 409 means a student is already in another group
+export const createOpdrachtGroup = (session_id, student_ids, move = false) =>
+  http.post(`/opdracht/sessions/${session_id}/groups`, { student_ids, move }).then(r => r.data)
+
+export const updateOpdrachtGroup = (group_id, student_ids, move = false) =>
+  http.put(`/opdracht/groups/${group_id}`, { student_ids, move }).then(r => r.data)
+
+export const deleteOpdrachtGroup = (group_id) =>
+  http.delete(`/opdracht/groups/${group_id}`).then(r => r.data)
+
+export const setOpdrachtEntry = (session_id, student_id, part, status = 'ingeleverd') =>
+  http.post(`/opdracht/sessions/${session_id}/entries`, { student_id, part, status }).then(r => r.data)
+
+export const deleteOpdrachtEntry = (session_id, student_id, part) =>
+  http.delete(`/opdracht/sessions/${session_id}/entries/${student_id}/${part}`).then(r => r.data)
+
+// data: { criterion_id, group_id | student_id, level?, comment?, reset? }
+export const setOpdrachtLevel = (session_id, data) =>
+  http.put(`/opdracht/sessions/${session_id}/levels`, data).then(r => r.data)
+
+export const getOpdrachtUsage = (test_id) =>
+  http.get(`/opdracht/tests/${test_id}/usage`).then(r => r.data)
