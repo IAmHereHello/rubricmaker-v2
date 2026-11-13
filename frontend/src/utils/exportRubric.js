@@ -25,7 +25,14 @@ async function addElementPages(pdf, element, startOnNewPage) {
   const breaks = [...element.querySelectorAll('[data-pdf-block]')]
     .map(el => Math.round((el.getBoundingClientRect().bottom - top) * pxPerCss))
 
+  // Sections that should start on a new page rather than be split
+  const groups = [...element.querySelectorAll('[data-pdf-keep]')].map(el => {
+    const r = el.getBoundingClientRect()
+    return [Math.round((r.top - top) * pxPerCss), Math.round((r.bottom - top) * pxPerCss)]
+  })
+
   const slices = planPageSlices({
+    groups,
     breaks,
     canvasHeight: canvas.height,
     firstPageHeight: Math.floor(pdfHeight * pxPerMm),
