@@ -2,7 +2,7 @@
 // page you actually came from instead of one fixed page.
 //
 // The trail is a list of { key, url }. Pages that count as one place share a key:
-// the two pages of a student (Voortgang, Rapport & Radar) for every student, so
+// the pages of a student (Voortgang, Rapport & Radar, Leerlingrapport) for every student, so
 // switching student or page there is not a step back.
 
 const TOP_LEVEL = ['/students', '/tests', '/sessions/new', '/inhalers', '/reports']
@@ -10,7 +10,7 @@ const MAX_TRAIL = 30
 const STORAGE_KEY = 'backTrail'
 
 export function placeKey(pathname) {
-  if (/^\/students\/[^/]+\/(progress|report)\/?$/.test(pathname)) return 'student'
+  if (/^\/students\/[^/]+\/(progress|report|leerlingrapport)\/?$/.test(pathname)) return 'student'
   return pathname.replace(/\/+$/, '') || '/'
 }
 

@@ -95,6 +95,14 @@ export const getStudentRadar = (student_id) =>
 export const getClassRadar = (class_name) =>
   http.get(`/reports/class/${encodeURIComponent(class_name)}/radar`).then(r => r.data)
 
+// ── Leerlingrapport ───────────────────────────────────────────────────────────
+
+export const getLeerlingrapport = (student_id) =>
+  http.get(`/leerlingrapport/student/${student_id}`).then(r => r.data)
+
+export const saveStudentNotes = (student_id, notes) =>
+  http.put(`/leerlingrapport/student/${student_id}/notes`, notes).then(r => r.data)
+
 // ── Grades ────────────────────────────────────────────────────────────────────
 
 export const getSessionGrades = (session_id) =>
