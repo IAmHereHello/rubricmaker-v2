@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import * as api from '../api.js'
+import BackButton from '../components/BackButton.jsx'
 import {
   ROUTES, LEVELS, newId, emptyLevels, applies, criterionMax, levelsFor,
 } from '../utils/opdracht.js'
@@ -312,7 +313,7 @@ export default function OpdrachtEdit({ initialTest }) {
             style={{ fontSize: 20, fontWeight: 700, width: '100%', maxWidth: 480, color: '#1e3a5f' }}
           />
         </div>
-        <Link to="/tests" className="btn btn-secondary">← Terug</Link>
+        <BackButton fallback="/tests" />
       </div>
 
       {sectionsState.map((sec, si) => (

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useSearchParams, Link, useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
+import BackButton from '../components/BackButton.jsx'
 import RouteBadge from '../components/RouteBadge.jsx'
 import OpdrachtRubric from '../components/OpdrachtRubric.jsx'
 import { LevelChip } from '../components/OpdrachtCriterion.jsx'
@@ -304,7 +305,7 @@ export default function OpdrachtReport({ sessionId }) {
               </div>
             )}
           </div>
-          <Link to="/reports" className="btn btn-secondary">← Terug</Link>
+          <BackButton fallback="/reports" />
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
+import BackButton from '../components/BackButton.jsx'
 import RouteBadge from '../components/RouteBadge.jsx'
 import { LEVEL_LABELS } from '../constants.js'
 import { displayCijfer, formatCijfer, gradeLabel, computeGrade, isCijferGrade, learningGoalResults } from '../utils/gradingLogic.js'
@@ -645,7 +646,7 @@ export default function SessionReport() {
               </div>
             )}
           </div>
-          <Link to="/reports" className="btn btn-secondary">← Terug</Link>
+          <BackButton fallback="/reports" />
         </div>
       </div>
 

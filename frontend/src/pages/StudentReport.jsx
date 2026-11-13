@@ -5,6 +5,7 @@ import {
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
 } from 'recharts'
 import * as api from '../api.js'
+import StudentSwitcher from '../components/StudentSwitcher.jsx'
 import RouteBadge from '../components/RouteBadge.jsx'
 import { DOMAINS, LEVELS, LEVEL_LABELS, STUDENT_COLORS } from '../constants.js'
 import { exportPDF } from '../utils/exportPDF.js'
@@ -274,18 +275,29 @@ export default function StudentReport() {
   const reportRef = useRef(null)
 
   useEffect(() => {
+    // `alive`: when switching student quickly, a slow earlier answer must not win
+    let alive = true
     Promise.all([
       api.getStudentTimeline(id),
       api.getStudentRadar(id),
     ])
       .then(([tl, rd]) => {
+        if (!alive) return
         setTimeline(tl)
         setRadar(rd)
-        return api.getStudents(tl.student.class_name)
+        setError('')
       })
-      .then(setClassStudents)
-      .catch(() => setError('Fout bij laden van rapport.'))
+      .catch(() => { if (alive) setError('Fout bij laden van rapport.') })
+    return () => { alive = false }
   }, [id])
+
+  const className = timeline?.student.class_name
+  useEffect(() => {
+    if (!className) return
+    let alive = true
+    api.getStudents(className).then(l => { if (alive) setClassStudents(l) }).catch(() => {})
+    return () => { alive = false }
+  }, [className])
 
   async function handleExport() {
     if (!reportRef.current || !timeline) return
@@ -308,7 +320,7 @@ export default function StudentReport() {
     <div className="page">
       <div className="page-header">
         <div>
-          <h1>Rapport — {student.name}</h1>
+          <h1>Rapport — <StudentSwitcher student={student} students={classStudents} page="report" /></h1>
           <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center' }}>
             <RouteBadge route={student.route} />
             <span className="text-muted">Klas {student.class_name}</span>
@@ -318,7 +330,7 @@ export default function StudentReport() {
           <button className="btn btn-secondary" onClick={handleExport} disabled={exporting}>
             {exporting ? 'Exporteren...' : 'Exporteer PDF'}
           </button>
-          <Link to={`/students/${id}/progress`} className="btn btn-secondary">← Voortgang</Link>
+          <Link to={`/students/${id}/progress`} replace className="btn btn-secondary">← Voortgang</Link>
         </div>
       </div>
 
@@ -343,10 +355,11 @@ export default function StudentReport() {
         {tab === 'progress' ? (
           <div className="card">
             <h2 style={{ fontSize: 15, marginBottom: 16 }}>Voortgang over tijd</h2>
-            <ProgressTab sessions={sessions} studentId={id} />
+            <ProgressTab sessions={sessions} studentId={student.id} />
           </div>
         ) : (
           <RadarTab
+            key={student.id}
             primaryStudent={student}
             primaryRadar={radar}
             classStudents={classStudents}
