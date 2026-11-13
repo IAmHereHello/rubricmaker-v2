@@ -38,7 +38,7 @@ export default function OpdrachtRubric({ student, test, session, summary }) {
   const route = student.route
 
   return (
-    <div data-pdf-section style={PAGE_STYLE}>
+    <div data-pdf-section data-pdf-continuation={`${student.name} · ${test.name}`} style={PAGE_STYLE}>
       <div style={{ borderBottom: '2px solid #e5e7eb', paddingBottom: 10, marginBottom: 14 }}>
         <div style={{ fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 3 }}>
           Grote opdracht
@@ -52,7 +52,9 @@ export default function OpdrachtRubric({ student, test, session, summary }) {
           <div style={{ fontSize: 17, fontWeight: 700 }}>{student.name}</div>
           {summary?.max > 0 && (
             <div style={{ fontSize: 12, color: '#6b7280', marginTop: 3 }}>
-              Totaal: <strong>{summary.points}/{summary.max}</strong> punten
+              {summary.complete
+                ? <>Totaal: <strong>{summary.points}/{summary.max}</strong> punten</>
+                : <><strong>{summary.points} {summary.points === 1 ? 'punt' : 'punten'}</strong> tot nu toe, nog niet alles beoordeeld</>}
             </div>
           )}
         </div>
@@ -98,6 +100,11 @@ export default function OpdrachtRubric({ student, test, session, summary }) {
                     <tr key={c.id} data-pdf-block>
                       <td style={{ ...cell, fontWeight: 600 }}>
                         {c.name}
+                        {c.feedback && (
+                          <span style={{ display: 'inline-block', marginLeft: 4, fontSize: 9, fontWeight: 700, background: '#fee2e2', color: '#991b1b', borderRadius: 3, padding: '0 4px', verticalAlign: 'middle' }}>
+                            Verplicht
+                          </span>
+                        )}
                         {eff?.comment && (
                           <div style={{ fontWeight: 400, fontStyle: 'italic', color: '#4b5563', marginTop: 4 }}>{eff.comment}</div>
                         )}

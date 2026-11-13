@@ -110,7 +110,7 @@ function CriterionEditor({ criterion, onChange }) {
         <label style={{ display: 'flex', alignItems: 'flex-start', gap: 6, cursor: 'pointer', maxWidth: 420 }}>
           <input type="checkbox" checked={!!criterion.feedback} onChange={e => set({ feedback: e.target.checked })} style={{ marginTop: 2 }} />
           <span>
-            <strong>Feedback</strong>
+            <strong>Verplicht</strong>
             <span className="text-muted"> · Niet laten zien bij dit onderdeel betekent altijd In ontwikkeling</span>
           </span>
         </label>
@@ -347,7 +347,7 @@ export default function OpdrachtEdit({ initialTest }) {
                   >
                     <span style={{ color: '#888', width: 12 }}>{isOpen ? '▾' : '▸'}</span>
                     <span>{c.name || <em className="text-muted">Naamloos onderdeel</em>}</span>
-                    {c.feedback && <span style={{ fontSize: 11, background: '#fee2e2', color: '#991b1b', borderRadius: 4, padding: '1px 6px' }}>Feedback</span>}
+                    {c.feedback && <span style={{ fontSize: 11, background: '#fee2e2', color: '#991b1b', borderRadius: 4, padding: '1px 6px' }}>Verplicht</span>}
                     <span style={{ display: 'flex', gap: 3 }}>
                       {c.routes.map(r => <span key={r} className={`badge badge-${r}`} style={{ padding: '1px 6px', fontSize: 10 }}>{r[0]}</span>)}
                     </span>
@@ -405,7 +405,7 @@ export default function OpdrachtEdit({ initialTest }) {
           </tbody>
         </table>
         <div className="text-muted" style={{ fontSize: 12, marginTop: 8 }}>
-          In punten. Een onderdeel met Feedback op Niet laten zien geeft altijd In ontwikkeling.
+          In punten. Een verplicht onderdeel op Niet laten zien geeft altijd In ontwikkeling.
         </div>
       </div>
 

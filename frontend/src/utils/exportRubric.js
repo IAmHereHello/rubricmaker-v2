@@ -46,7 +46,28 @@ async function addElementPages(pdf, element, startOnNewPage) {
 
     if (startOnNewPage || !first) pdf.addPage()
     pdf.addImage(slice.toDataURL('image/jpeg', JPEG_QUALITY), 'JPEG', 0, marginMm, pdfWidth, slice.height / pxPerMm)
+    const label = element.dataset.pdfContinuation
+    if (!first && label) {
+      const text = `${label} · blad ${i + 1}`
+      pdf.addImage(labelImage(text, canvas.width, Math.round(CONTINUATION_MARGIN_MM * pxPerMm)), 'JPEG', 0, 0, pdfWidth, CONTINUATION_MARGIN_MM)
+    }
   })
+}
+
+// Text in the top margin of a continuation page, so a loose sheet still shows
+// whose it is. Drawn on a canvas so names with any accent render correctly.
+function labelImage(text, widthPx, heightPx) {
+  const c = document.createElement('canvas')
+  c.width = widthPx
+  c.height = heightPx
+  const ctx = c.getContext('2d')
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, widthPx, heightPx)
+  ctx.fillStyle = '#6b7280'
+  ctx.font = `${Math.round(heightPx * 0.32)}px system-ui, Arial, sans-serif`
+  ctx.textBaseline = 'middle'
+  ctx.fillText(text, Math.round(widthPx * 0.04), Math.round(heightPx * 0.6))
+  return c.toDataURL('image/jpeg', JPEG_QUALITY)
 }
 
 const pageCount = pdf => pdf.internal.getNumberOfPages()
