@@ -2,6 +2,31 @@ export function isApplicableForQuestion(student, question) {
   return (question.routes || []).includes(student.route)
 }
 
+// Students with the route they had in this session. A session graded before a route change
+// keeps the old route (session.student_routes holds those, keyed by student id).
+export function withSessionRoutes(students, session) {
+  const overrides = session?.student_routes || {}
+  return students.map(s => (overrides[s.id] && overrides[s.id] !== s.route ? { ...s, route: overrides[s.id] } : s))
+}
+
+// What switching a student to `newRoute` does to the scores in this session:
+// - hide: scores with points on questions outside the new route (become n.v.t., points kept)
+// - restore: points hidden earlier on questions of the new route (count again)
+// - questionCount: how many questions of the test belong to the new route
+export function routeSwitchEffect(t, student, newRoute, scoreMap) {
+  const hide = [], restore = []
+  let questionCount = 0
+  for (const q of t.questions) {
+    const inNew = (q.routes || []).includes(newRoute)
+    if (inNew) questionCount++
+    const sc = scoreMap[`${q.id}-${student.id}`]
+    if (!sc || sc.points === null || sc.points === undefined) continue
+    if (!inNew && !sc.excluded) hide.push({ question: q, score: sc })
+    if (inNew && sc.excluded) restore.push({ question: q, score: sc })
+  }
+  return { hide, restore, questionCount }
+}
+
 export function getOrderedStudents(sess, studs) {
   if (sess?.student_order?.length) {
     return sess.student_order.map(sid => studs.find(s => s.id === sid)).filter(Boolean)

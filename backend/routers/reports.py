@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..route_history import effective_routes
 from ..models import Student, Score, Question, Session as SessionModel, Test
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -77,6 +78,7 @@ def session_report(session_id: int, db: Session = Depends(get_db)):
             .all()
         )
 
+    routes = effective_routes(db, session_id, students)
     scores = db.query(Score).filter(Score.session_id == session_id).all()
 
     score_map = {}
@@ -134,7 +136,7 @@ def session_report(session_id: int, db: Session = Depends(get_db)):
             }
             for q in questions
         ],
-        "students": [{"id": s.id, "name": s.name, "route": s.route} for s in students],
+        "students": [{"id": s.id, "name": s.name, "route": routes[s.id]} for s in students],
         "scores": scores_out,
         "class_averages": class_avgs,
     }

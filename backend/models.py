@@ -15,6 +15,7 @@ class Student(Base):
     scores = relationship("Score", back_populates="student", cascade="all, delete-orphan")
     grades = relationship("StudentGrade", back_populates="student", cascade="all, delete-orphan")
     year_snapshots = relationship("StudentYearSnapshot", back_populates="student", cascade="all, delete-orphan")
+    session_routes = relationship("SessionStudentRoute", back_populates="student", cascade="all, delete-orphan")
     opdracht_entries = relationship("OpdrachtEntry", cascade="all, delete-orphan")
     opdracht_scores = relationship("OpdrachtScore", cascade="all, delete-orphan")
 
@@ -69,10 +70,29 @@ class Session(Base):
     test = relationship("Test", back_populates="sessions")
     scores = relationship("Score", back_populates="session", cascade="all, delete-orphan")
     grades = relationship("StudentGrade", back_populates="session", cascade="all, delete-orphan")
+    student_routes = relationship("SessionStudentRoute", back_populates="session", cascade="all, delete-orphan")
     opdracht_state = relationship("OpdrachtSessionState", cascade="all, delete-orphan", uselist=False)
     opdracht_groups = relationship("OpdrachtGroup", cascade="all, delete-orphan")
     opdracht_entries = relationship("OpdrachtEntry", cascade="all, delete-orphan")
     opdracht_scores = relationship("OpdrachtScore", cascade="all, delete-orphan")
+
+
+class SessionStudentRoute(Base):
+    """The route a student had in one session, stored when their route changes later.
+
+    A session without a row for a student uses the student's current route. When a route
+    changes, sessions graded earlier get a row with the old route, so they are not
+    recalculated with the new one."""
+    __tablename__ = "session_student_routes"
+    __table_args__ = (UniqueConstraint("session_id", "student_id", name="uq_session_student_route"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("sessions.id"), nullable=False, index=True)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False, index=True)
+    route = Column(String, nullable=False)
+
+    session = relationship("Session", back_populates="student_routes")
+    student = relationship("Student", back_populates="session_routes")
 
 
 class Score(Base):

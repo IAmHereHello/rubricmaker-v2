@@ -4,6 +4,7 @@ from typing import List, Optional
 
 from ..database import get_db
 from ..models import Student
+from ..route_history import change_student_route
 from ..schemas import StudentCreate, StudentUpdate, StudentOut, StudentImport
 from .. import opdracht_logic
 
@@ -55,8 +56,13 @@ def update_student(id: int, student: StudentUpdate, db: Session = Depends(get_db
     obj = db.query(Student).filter(Student.id == id).first()
     if not obj:
         raise HTTPException(404, "Student niet gevonden")
-    for field, value in student.model_dump().items():
+    data = student.model_dump()
+    new_route = data.pop("route")
+    for field, value in data.items():
         setattr(obj, field, value)
+    if new_route != obj.route:
+        # Tests the student was already graded on keep the old route.
+        change_student_route(db, obj, new_route)
     db.commit()
     opdracht_logic.sync_student(db, obj.id)
     db.refresh(obj)

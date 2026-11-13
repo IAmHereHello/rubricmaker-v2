@@ -396,6 +396,11 @@ export default function Students() {
               <select value={form.route} onChange={e => setForm(f => ({ ...f, route: e.target.value }))}>
                 {ROUTES.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
+              {editing !== 'new' && form.route !== editing.route && (
+                <div className="text-muted" style={{ fontSize: 12, marginTop: 4, maxWidth: 220 }}>
+                  Toetsen die al zijn nagekeken houden route {editing.route}.
+                </div>
+              )}
             </div>
             <div style={{ display: 'flex', gap: 8, paddingBottom: 1 }}>
               <button className="btn btn-primary" onClick={save}>Opslaan</button>
