@@ -16,6 +16,7 @@ Thresholds are in points. A student's result only exists once every part that
 applies to them is handed in and fully graded.
 """
 from sqlalchemy.orm import Session as DBSession
+from .route_history import effective_routes
 
 from .models import (
     Student, StudentGrade, Session as SessionModel, Test,
@@ -105,6 +106,11 @@ class Context:
         extra_ids = {sid for (sid, _) in self.entries} - known
         extra = db.query(Student).filter(Student.id.in_(extra_ids)).all() if extra_ids else []
         self.students = class_students + sorted(extra, key=lambda s: s.name)
+        # Route per student in this session: an opdracht graded before a route change keeps the old route
+        self.routes = effective_routes(db, session.id, self.students)
+
+    def route_of(self, student):
+        return self.routes.get(student.id, student.route)
 
     @property
     def mode(self):
@@ -151,7 +157,7 @@ def compute_grade(test, route, points, feedback_failed):
 
 
 def student_summary(ctx: Context, student):
-    route = student.route
+    route = ctx.route_of(student)
     test = ctx.test
     effective = {}
     parts = {}
@@ -291,7 +297,7 @@ def payload(ctx: Context, sync=True):
         },
         "parts_present": parts_present(test),
         "students": [
-            {"id": s.id, "name": s.name, "route": s.route, "class_name": s.class_name}
+            {"id": s.id, "name": s.name, "route": ctx.route_of(s), "class_name": s.class_name}
             for s in ctx.students
         ],
         "groups": groups,

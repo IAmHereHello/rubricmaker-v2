@@ -7,7 +7,7 @@ from typing import Dict, Iterable, Optional
 
 from sqlalchemy.orm import Session as DBSession
 
-from .models import Score, SessionStudentRoute, StudentGrade, Student
+from .models import OpdrachtEntry, OpdrachtScore, Score, SessionStudentRoute, StudentGrade, Student
 
 
 def session_route_overrides(db: DBSession, session_id: int) -> Dict[int, str]:
@@ -27,12 +27,17 @@ def change_student_route(db: DBSession, student: Student, new_route: str,
 
     from_session_id: the session in which the switch is made. That session and later ones
     use the new route; earlier sessions keep theirs. Without it (Leerlingen page) every
-    session in which the student already has scores or a grade keeps its route.
+    session in which the student already has scores, a grade or a Grote opdracht entry
+    keeps its route.
     Does not commit."""
     old_route = student.route
 
     session_ids = {sid for (sid,) in db.query(Score.session_id).filter(Score.student_id == student.id).distinct()}
     session_ids |= {sid for (sid,) in db.query(StudentGrade.session_id).filter(StudentGrade.student_id == student.id).distinct()}
+    # Grote opdrachten: handed in or graded
+    session_ids |= {sid for (sid,) in db.query(OpdrachtEntry.session_id).filter(
+        OpdrachtEntry.student_id == student.id, OpdrachtEntry.status != "niet_ingeleverd").distinct()}
+    session_ids |= {sid for (sid,) in db.query(OpdrachtScore.session_id).filter(OpdrachtScore.student_id == student.id).distinct()}
 
     existing = {
         r.session_id: r
