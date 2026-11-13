@@ -5,6 +5,7 @@ from typing import List, Optional
 from ..database import get_db
 from ..models import Student
 from ..schemas import StudentCreate, StudentUpdate, StudentOut, StudentImport
+from .. import opdracht_logic
 
 router = APIRouter(prefix="/students", tags=["students"])
 
@@ -57,6 +58,7 @@ def update_student(id: int, student: StudentUpdate, db: Session = Depends(get_db
     for field, value in student.model_dump().items():
         setattr(obj, field, value)
     db.commit()
+    opdracht_logic.sync_student(db, obj.id)
     db.refresh(obj)
     return obj
 

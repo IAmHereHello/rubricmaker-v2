@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Student, Score, Question, Session as SessionModel, StudentGrade, StudentYearSnapshot
+from ..models import Student, Score, Question, Session as SessionModel, StudentGrade, StudentYearSnapshot, Test, OpdrachtEntry
+from .. import opdracht_logic
 
 router = APIRouter(prefix="/progress", tags=["progress"])
 
@@ -70,6 +71,25 @@ def student_progress(student_id: int, db: Session = Depends(get_db)):
     grade_map = {g.session_id: g.grade for g in grade_rows}
     for sess in sessions_map.values():
         sess["grade"] = grade_map.get(sess["session_id"])
+
+    # Grote opdrachten have no Score rows; add them from their own tables
+    opdracht_session_ids = {
+        e.session_id for e in db.query(OpdrachtEntry).filter(OpdrachtEntry.student_id == student_id).all()
+    }
+    for session in db.query(SessionModel).filter(SessionModel.id.in_(opdracht_session_ids)).all() if opdracht_session_ids else []:
+        ctx = opdracht_logic.Context(db, session)
+        summ = opdracht_logic.student_summary(ctx, student)
+        sessions_map[session.id] = {
+            "session_id": session.id,
+            "class_name": session.class_name,
+            "created_at": session.created_at.isoformat(),
+            "total_scored": summ["points"],
+            "total_max": summ["max"],
+            "domains": {},
+            "grade": grade_map.get(session.id),
+            "test_name": ctx.test.name if ctx.test else "",
+            "is_opdracht": True,
+        }
 
     snapshots = (
         db.query(StudentYearSnapshot)
