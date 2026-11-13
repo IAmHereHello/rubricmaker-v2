@@ -24,4 +24,20 @@ describe('planPageSlices', () => {
     expect(planPageSlices({ ...page, breaks: [], canvasHeight: 1500 }))
       .toEqual([[0, 1000], [1000, 1500]])
   })
+
+  test('a section that would run past the page end starts on the next page', () => {
+    // section 1: 0-500, section 2: 520-1200 (fits on one page, not in what is left)
+    expect(planPageSlices({ ...page, breaks: [100, 500, 700, 900, 1200], groups: [[0, 500], [520, 1200]], canvasHeight: 1300 }))
+      .toEqual([[0, 520], [520, 1216]])
+  })
+
+  test('a section taller than a page starts on a new page, then splits at rows', () => {
+    expect(planPageSlices({ ...page, breaks: [300, 600, 900, 1200, 1500, 1800], groups: [[0, 300], [310, 1800]], canvasHeight: 1900 }))
+      .toEqual([[0, 310], [310, 1200], [1200, 1816]])
+  })
+
+  test('a section that fits on the page is left alone', () => {
+    expect(planPageSlices({ ...page, breaks: [400, 800], groups: [[0, 400], [410, 800]], canvasHeight: 900 }))
+      .toEqual([[0, 816]])
+  })
 })

@@ -75,7 +75,7 @@ export default function OpdrachtRubric({ student, test, session, summary }) {
         const status = summary?.parts?.[part]?.status
         const notIn = PART_STATUS_TEXT[status]
         return (
-          <div key={sec.id} style={{ marginBottom: 16 }}>
+          <div key={sec.id} data-pdf-keep style={{ marginBottom: 16 }}>
             <div data-pdf-block style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
               <span style={{ fontSize: 14, fontWeight: 700 }}>{sec.name}</span>
               <span style={{ fontSize: 11, color: '#9ca3af' }}>{part === 'groep' ? 'gezamenlijk' : 'individueel'}</span>
