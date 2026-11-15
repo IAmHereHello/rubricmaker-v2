@@ -4,6 +4,7 @@ import * as api from '../api.js'
 import BackButton from '../components/BackButton.jsx'
 import StudentSwitcher from '../components/StudentSwitcher.jsx'
 import RouteBadge from '../components/RouteBadge.jsx'
+import MathText from '../components/MathText.jsx'
 import { pyramidLabel, ROUTE_COLORS } from '../constants.js'
 import { gradeLabel } from '../utils/gradingLogic.js'
 import { exportRubricsPDF } from '../utils/exportRubric.js'
@@ -207,7 +208,7 @@ function GoalList({ title, color, bg, mark, goals, empty }) {
         goals.map(g => (
           <div key={g.name} style={{ background: bg, borderRadius: 6, padding: '6px 10px', marginBottom: 6, fontSize: 14 }}>
             <span style={{ fontWeight: 700, color, marginRight: 6 }}>{mark}</span>
-            <strong>{g.name}</strong>
+            <strong><MathText text={g.name} /></strong>
             <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
               {g.test_name}{g.earlier_failed ? ' · eerder niet behaald' : ''}
             </div>
