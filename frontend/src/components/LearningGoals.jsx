@@ -1,3 +1,4 @@
+import MathText from './MathText.jsx'
 // Learning goal display shared by the on-screen student view and the PDF report.
 // Inline styles only, so html2canvas renders them the same in the PDF.
 
@@ -13,7 +14,7 @@ export function GoalRequirement({ question, fontSize = 11 }) {
   if (!question.learning_goal || question.learning_goal_threshold == null) return null
   return (
     <div style={{ fontSize, color: '#1a6ecc', marginTop: 3 }}>
-      Leerdoel: <strong>{question.learning_goal}</strong>
+      Leerdoel: <strong><MathText text={question.learning_goal} /></strong>
       {' · '}behaald bij minimaal {question.learning_goal_threshold} van {question.max_score} punten
     </div>
   )
@@ -49,12 +50,12 @@ export function GoalSummary({ goals, fontSize = 12, showTitle = true }) {
             }}>
               {g.achieved ? '✓ Behaald' : '✗ Niet behaald'}
             </span>
-            <strong>{g.name}</strong>
+            <strong><MathText text={g.name} /></strong>
           </div>
           <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
             {g.items.map(({ question: q, points, passed }) => (
               <div key={q.id} style={{ color: '#374151' }}>
-                {q.description}: {points ?? '—'} van {q.max_score} punten (minimaal {q.learning_goal_threshold}) <Mark passed={passed} />
+                <MathText text={q.description} />: {points ?? '—'} van {q.max_score} punten (minimaal {q.learning_goal_threshold}) <Mark passed={passed} />
               </div>
             ))}
           </div>

@@ -1,6 +1,7 @@
 import RouteBadge from './RouteBadge.jsx'
 import { gradeLabel } from '../utils/gradingLogic.js'
 import { LEVELS, sectionsOf, partOf, applies, levelsFor, levelPoints, criterionMax, opdrachtExplanation } from '../utils/opdracht.js'
+import MathText from './MathText.jsx'
 
 const GRADE_STYLES = {
   expert: { background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d' },
@@ -99,7 +100,7 @@ export default function OpdrachtRubric({ student, test, session, summary }) {
                   return (
                     <tr key={c.id} data-pdf-block>
                       <td style={{ ...cell, fontWeight: 600 }}>
-                        {c.name}
+                        <MathText text={c.name} />
                         {c.feedback && (
                           <span style={{ display: 'inline-block', marginLeft: 4, fontSize: 9, fontWeight: 700, background: '#fee2e2', color: '#991b1b', borderRadius: 3, padding: '0 4px', verticalAlign: 'middle' }}>
                             Verplicht
@@ -123,7 +124,7 @@ export default function OpdrachtRubric({ student, test, session, summary }) {
                             }}
                           >
                             {active && <span style={{ color: l.color, fontWeight: 700 }}>✓ </span>}
-                            {texts?.[l.key]?.text || ''}
+                            <MathText text={texts?.[l.key]?.text || ''} />
                             <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 3, fontWeight: 400 }}>
                               {levelPoints(c, route, l.key)} pt
                             </div>

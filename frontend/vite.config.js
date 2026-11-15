@@ -10,6 +10,7 @@ export default defineConfig({
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
           'vendor-charts': ['recharts'],
           'vendor-pdf': ['jspdf', 'html2canvas'],
+          'vendor-math': ['katex'],
         },
       },
     },

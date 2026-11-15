@@ -6,6 +6,7 @@ import CijferInput from '../components/CijferInput.jsx'
 import StarInput from '../components/StarInput.jsx'
 import { pyramidLabel } from '../constants.js'
 import { isApplicableForQuestion, displayCijfer, formatCijfer, calcCijfer, shiftCijfer, formatCijferFormula, gradeLabel, computeGrade, withSessionRoutes } from '../utils/gradingLogic.js'
+import MathText from '../components/MathText.jsx'
 
 const GRADE_OPTIONS = [
   { value: 'expert',          label: 'Expert' },
@@ -498,11 +499,11 @@ export default function InhalerGrade() {
             <div className="grade-question-label">
               Vraag {qIdx + 1} · {currentQuestion.domain} · {pyramidLabel(currentQuestion.pyramid_level)} · max {currentQuestion.max_score} pt
             </div>
-            <div className="grade-question-desc">{currentQuestion.description}</div>
+            <div className="grade-question-desc"><MathText text={currentQuestion.description} /></div>
             {currentQuestion.answer && (
               <div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#888', marginBottom: 4 }}>Modelantwoord</div>
-                <div className="grade-answer">{currentQuestion.answer}</div>
+                <div className="grade-answer"><MathText text={currentQuestion.answer} /></div>
               </div>
             )}
           </div>

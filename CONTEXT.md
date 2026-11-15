@@ -371,6 +371,15 @@ A `Test` and its `Question`s are never modified during a session. Multiple sessi
 
 ### Leerlingrapport (oudergesprek)
 `backend/routers/leerlingrapport.py` + `frontend/src/pages/Leerlingrapport.jsx` (`/students/:id/leerlingrapport`). One parent-facing overview per student: summary with trend, Openstaand werk (missed toetsen and Grote opdrachten niet ingeleverd; dismissed inhalers show as "vervallen"), Gaat goed / Aandachtspunten (75% and up / below 55%, at least 5 points), anonymous route average (hidden with fewer than 3 other students), leerdoelen (most recent attempt counts) and notes (`student_notes` table, kept across school years). Never show names of other students on this page. A toets counts as missed only once its stack is closed. In the PDF an empty Openstaand werk block is left out.
+### Formulas in rubric text (LaTeX)
+Rubric text may contain formulas: `$...$` inside a sentence, `$$...$$` on its own line, `\$` for a real dollar sign. The text is stored exactly as typed (no schema change); rendering happens in the frontend with KaTeX via `components/MathText.jsx` (parser in `utils/mathText.js`).
+
+- Fields: question `description`, `answer`, `learning_goal`, and for Grote opdrachten the onderdeel names and level descriptions. Not comments, test names or student names.
+- Any new place that shows one of these fields must use `<MathText text={...} />`, otherwise the raw `$...$` is shown.
+- Deliberate deviations from strict LaTeX: `%` is a percent sign, and a comma directly between two digits is a decimal comma.
+- A formula with a mistake falls back to the raw text (red only in the editor preview, `showErrors`).
+- A `$$...$$` formula wider than its box is scaled down (`.math-display`, `contain: inline-size`), so the PDF export never cuts it off.
+- Stays raw text: chart labels, `title` tooltips, the leerdoel `<datalist>`.
 
 ## 7. Known Issues and Sensitive Areas
 
