@@ -369,6 +369,8 @@ A `Test` and its `Question`s are never modified during a session. Multiple sessi
 
 ---
 
+### Leerlingrapport (oudergesprek)
+`backend/routers/leerlingrapport.py` + `frontend/src/pages/Leerlingrapport.jsx` (`/students/:id/leerlingrapport`). One parent-facing overview per student: summary with trend, Openstaand werk (missed toetsen and Grote opdrachten niet ingeleverd; dismissed inhalers show as "vervallen"), Gaat goed / Aandachtspunten (75% and up / below 55%, at least 5 points), anonymous route average (hidden with fewer than 3 other students), leerdoelen (most recent attempt counts) and notes (`student_notes` table, kept across school years). Never show names of other students on this page. A toets counts as missed only once its stack is closed. In the PDF an empty Openstaand werk block is left out.
 ### Formulas in rubric text (LaTeX)
 Rubric text may contain formulas: `$...$` inside a sentence, `$$...$$` on its own line, `\$` for a real dollar sign. The text is stored exactly as typed (no schema change); rendering happens in the frontend with KaTeX via `components/MathText.jsx` (parser in `utils/mathText.js`).
 

@@ -79,6 +79,7 @@ export default function StudentProgress() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
+          <Link to={`/students/${id}/leerlingrapport`} replace className="btn btn-primary">Leerlingrapport</Link>
           <Link to={`/students/${id}/report`} replace className="btn btn-secondary">Rapport & Radar</Link>
           <BackButton fallback="/students" />
         </div>

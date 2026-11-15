@@ -18,6 +18,7 @@ class Student(Base):
     session_routes = relationship("SessionStudentRoute", back_populates="student", cascade="all, delete-orphan")
     opdracht_entries = relationship("OpdrachtEntry", cascade="all, delete-orphan")
     opdracht_scores = relationship("OpdrachtScore", cascade="all, delete-orphan")
+    note = relationship("StudentNote", cascade="all, delete-orphan", uselist=False)
 
 
 class Test(Base):
@@ -201,3 +202,17 @@ class OpdrachtScore(Base):
     criterion_id = Column(String, nullable=False)
     level = Column(String, nullable=True)
     comment = Column(String, nullable=True)
+
+
+# ── Leerlingrapport ────────────────────────────────────────────────────────────
+# New table, so create_all() adds it; no migration needed.
+
+class StudentNote(Base):
+    """Teacher's notes for the oudergesprek, one row per student. Kept across school years."""
+    __tablename__ = "student_notes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False, unique=True)
+    gesprekspunten = Column(String, nullable=False, default="")
+    afspraken = Column(String, nullable=False, default="")
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

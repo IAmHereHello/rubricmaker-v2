@@ -330,6 +330,7 @@ export default function StudentReport() {
           <button className="btn btn-secondary" onClick={handleExport} disabled={exporting}>
             {exporting ? 'Exporteren...' : 'Exporteer PDF'}
           </button>
+          <Link to={`/students/${id}/leerlingrapport`} replace className="btn btn-primary">Leerlingrapport</Link>
           <Link to={`/students/${id}/progress`} replace className="btn btn-secondary">← Voortgang</Link>
         </div>
       </div>

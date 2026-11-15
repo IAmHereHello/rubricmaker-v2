@@ -10,7 +10,7 @@ from ..models import (
     Student, Score, Question,
     Session as SessionModel, StudentGrade,
     StudentYearSnapshot, Test, SessionStudentRoute,
-    OpdrachtGroupScore, OpdrachtGroup, OpdrachtEntry, OpdrachtScore, OpdrachtSessionState,
+    OpdrachtGroupScore, OpdrachtGroup, OpdrachtEntry, OpdrachtScore, OpdrachtSessionState, StudentNote,
 )
 from ..schemas import SchoolYearAdvanceRequest
 
@@ -208,12 +208,17 @@ def advance_school_year(body: SchoolYearAdvanceRequest, db: DBSession = Depends(
         db.query(model).delete(synchronize_session=False)
     db.query(SessionModel).delete(synchronize_session=False)
 
-    # Delete non-continuing students
+    # Delete non-continuing students, with their oudergesprek notes (notes of continuing
+    # students are kept: last year's afspraken stay available)
     if continuing_ids:
+        db.query(StudentNote).filter(
+            StudentNote.student_id.notin_(list(continuing_ids))
+        ).delete(synchronize_session=False)
         db.query(Student).filter(
             Student.id.notin_(list(continuing_ids))
         ).delete(synchronize_session=False)
     else:
+        db.query(StudentNote).delete(synchronize_session=False)
         db.query(Student).delete(synchronize_session=False)
 
     # Update class names (and optionally routes) for continuing students
