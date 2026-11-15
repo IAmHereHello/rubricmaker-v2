@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
 import RoutePicker from '../components/RoutePicker.jsx'
 import { pyramidLabel } from '../constants.js'
+import MathText from '../components/MathText.jsx'
 import {
   isApplicableForQuestion,
   getOrderedStudents,
@@ -1117,11 +1118,11 @@ export default function Grade() {
               <div className="grade-question-label">
                 Vraag 1 · {q1.domain} · {pyramidLabel(q1.pyramid_level)} · max {q1.max_score} pt
               </div>
-              <div className="grade-question-desc">{q1.description}</div>
+              <div className="grade-question-desc"><MathText text={q1.description} /></div>
               {q1.answer && (
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 700, color: '#888', marginBottom: 4 }}>Modelantwoord</div>
-                  <div className="grade-answer">{q1.answer}</div>
+                  <div className="grade-answer"><MathText text={q1.answer} /></div>
                 </div>
               )}
             </div>
@@ -1368,11 +1369,11 @@ export default function Grade() {
             <div className="grade-question-label">
               Vraag {curQIdx + 1} · {currentQuestion.domain} · {pyramidLabel(currentQuestion.pyramid_level)} · max {currentQuestion.max_score} pt
             </div>
-            <div className="grade-question-desc">{currentQuestion.description}</div>
+            <div className="grade-question-desc"><MathText text={currentQuestion.description} /></div>
             {currentQuestion.answer && (
               <div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#888', marginBottom: 4 }}>Modelantwoord</div>
-                <div className="grade-answer">{currentQuestion.answer}</div>
+                <div className="grade-answer"><MathText text={currentQuestion.answer} /></div>
               </div>
             )}
           </div>

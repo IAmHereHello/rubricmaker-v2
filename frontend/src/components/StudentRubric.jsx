@@ -2,6 +2,7 @@ import RouteBadge from './RouteBadge.jsx'
 import { GoalRequirement, GoalSummary } from './LearningGoals.jsx'
 import { LEVEL_LABELS } from '../constants.js'
 import { STAR_VALUE, isCijferGrade, gradeLabel, formatCijferFormula, formatCijfer, displayCijfer, learningGoalResults, gradeExplanation } from '../utils/gradingLogic.js'
+import MathText from './MathText.jsx'
 
 const GRADE_STYLES = {
   expert: { background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d' },
@@ -157,7 +158,7 @@ export default function StudentRubric({ student, test, session, questions, score
             return (
               <tr key={q.id} data-pdf-block style={{ borderBottom: '1px solid #e5e7eb', verticalAlign: 'top' }}>
                 <td style={{ padding: '8px 10px' }}>
-                  <div style={{ fontWeight: 600 }}>{q.description}</div>
+                  <div style={{ fontWeight: 600 }}><MathText text={q.description} /></div>
                   <GoalRequirement question={q} />
                   {sc?.comment && (
                     <div style={{ fontSize: 11, color: '#9ca3af', fontStyle: 'italic', marginTop: 3 }}>

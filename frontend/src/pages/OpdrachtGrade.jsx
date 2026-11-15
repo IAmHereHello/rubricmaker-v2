@@ -4,6 +4,7 @@ import * as api from '../api.js'
 import RouteBadge from '../components/RouteBadge.jsx'
 import OpdrachtCriterion from '../components/OpdrachtCriterion.jsx'
 import { gradeLabel } from '../utils/gradingLogic.js'
+import MathText from '../components/MathText.jsx'
 import {
   sectionsOf, partOf, applies, MODE_LABELS, PART_LABELS, thresholdsFor, ROUTES, routeMax, LEVEL_BY_KEY,
 } from '../utils/opdracht.js'
@@ -711,7 +712,7 @@ export default function OpdrachtGrade({ sessionId }) {
                 <div style={{ fontWeight: 600 }}>
                   {s.name || 'Naamloos'} <span className="text-muted" style={{ fontWeight: 400 }}>· {s.group ? 'gezamenlijk' : 'individueel'}</span>
                 </div>
-                {s.criteria.map(c => <div key={c.id} style={{ color: '#888', paddingLeft: 8 }}>{c.name}</div>)}
+                {s.criteria.map(c => <div key={c.id} style={{ color: '#888', paddingLeft: 8 }}><MathText text={c.name} /></div>)}
               </div>
             ))}
             <hr className="divider" />

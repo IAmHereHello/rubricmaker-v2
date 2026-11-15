@@ -1,19 +1,20 @@
 import { useState, useEffect } from 'react'
 import { LEVELS, LEVEL_BY_KEY, levelsFor, levelPoints } from '../utils/opdracht.js'
+import MathText from './MathText.jsx'
 
 // Description text for one level; when routes differ, one line per route
 function LevelText({ criterion, routes, level }) {
   const texts = routes.map(r => ({ route: r, text: levelsFor(criterion, r)?.[level]?.text || '' }))
   const distinct = [...new Set(texts.map(t => t.text))]
   if (distinct.length <= 1) {
-    return <div className="opd-btn-text">{distinct[0] || <span className="text-muted">Geen beschrijving</span>}</div>
+    return <div className="opd-btn-text">{distinct[0] ? <MathText text={distinct[0]} /> : <span className="text-muted">Geen beschrijving</span>}</div>
   }
   return (
     <div className="opd-btn-text">
       {texts.map(t => (
         <div key={t.route} style={{ marginTop: 3 }}>
           <span className={`badge badge-${t.route}`} style={{ padding: '0 5px', fontSize: 10, marginRight: 4 }}>{t.route[0]}</span>
-          {t.text || <span className="text-muted">Geen beschrijving</span>}
+          {t.text ? <MathText text={t.text} /> : <span className="text-muted">Geen beschrijving</span>}
         </div>
       ))}
     </div>
@@ -38,7 +39,7 @@ export default function OpdrachtCriterion({ criterion, routes, selected, comment
   return (
     <div className="opd-criterion">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontWeight: 700, fontSize: 15, color: '#1e3a5f' }}>{criterion.name || 'Naamloos onderdeel'}</span>
+        <span style={{ fontWeight: 700, fontSize: 15, color: '#1e3a5f' }}>{criterion.name ? <MathText text={criterion.name} /> : 'Naamloos onderdeel'}</span>
         {criterion.feedback && (
           <span title="Niet laten zien bij dit onderdeel betekent altijd In ontwikkeling" style={{ fontSize: 11, background: '#fee2e2', color: '#991b1b', borderRadius: 4, padding: '1px 6px' }}>
             Verplicht

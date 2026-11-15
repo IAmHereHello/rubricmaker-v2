@@ -6,6 +6,7 @@ import CijferInput from '../components/CijferInput.jsx'
 import StarInput from '../components/StarInput.jsx'
 import { pyramidLabel } from '../constants.js'
 import { displayCijfer, formatCijfer, calcCijfer, shiftCijfer, formatCijferFormula, gradeLabel, computeGrade, withSessionRoutes } from '../utils/gradingLogic.js'
+import MathText from '../components/MathText.jsx'
 
 const GRADE_OPTIONS = [
   { value: 'expert',         label: 'Expert' },
@@ -454,7 +455,7 @@ export default function Review() {
                     padding: '3px 8px', borderRadius: 4,
                     background: achieved ? '#e8f5e9' : '#fdecea', color: achieved ? '#2e7d32' : '#c62828',
                   }}>
-                    {achieved ? '✓' : '✗'} {name}
+                    {achieved ? '✓' : '✗'} <span><MathText text={name} /></span>
                   </span>
                 ))}
               </div>

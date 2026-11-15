@@ -8,6 +8,7 @@ import { displayCijfer, formatCijfer, gradeLabel, computeGrade, isCijferGrade, l
 import { exportRubricsPDF, exportRubricsZip } from '../utils/exportRubric.js'
 import StudentRubric from '../components/StudentRubric.jsx'
 import { GoalRequirement, GoalSummary } from '../components/LearningGoals.jsx'
+import MathText from '../components/MathText.jsx'
 
 function ScoreCell({ sc, maxScore }) {
   if (!sc) return <span className="text-muted">—</span>
@@ -126,7 +127,7 @@ function StudentView({ data, selectedId, setSelectedId, grades, onEdit }) {
               return (
                 <tr key={q.id} style={{ verticalAlign: 'top' }}>
                   <td>
-                    <div style={{ fontWeight: 500 }}>{q.description}</div>
+                    <div style={{ fontWeight: 500 }}><MathText text={q.description} /></div>
                     {!sc?.excluded && <GoalRequirement question={q} fontSize={12} />}
                   </td>
                   <td>{q.domain || '—'}</td>
@@ -236,10 +237,10 @@ function ClassView({ data }) {
                 <tr key={q.id}>
                   <td>
                     <span style={{ color: '#888', marginRight: 6, fontSize: 12 }}>{i + 1}.</span>
-                    <span style={{ fontWeight: 500 }}>{q.description}</span>
+                    <span style={{ fontWeight: 500 }}><MathText text={q.description} /></span>
                     {isGoal && (
                       <span style={{ marginLeft: 6, fontSize: 11, background: '#e8f0fc', color: '#1a6ecc', borderRadius: 3, padding: '1px 4px' }}>
-                        {q.learning_goal} ≥{q.learning_goal_threshold}
+                        <MathText text={q.learning_goal} /> ≥{q.learning_goal_threshold}
                       </span>
                     )}
                     {(q.domain || q.pyramid_level) && (
