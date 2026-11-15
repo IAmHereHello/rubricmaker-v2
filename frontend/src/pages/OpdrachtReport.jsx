@@ -8,6 +8,7 @@ import { LevelChip } from '../components/OpdrachtCriterion.jsx'
 import { gradeLabel } from '../utils/gradingLogic.js'
 import { exportRubricsPDF, exportRubricsZip } from '../utils/exportRubric.js'
 import { sectionsOf, partOf, applies, PART_LABELS } from '../utils/opdracht.js'
+import MathText from '../components/MathText.jsx'
 
 const GRADE_RANK = { expert: 3, beheerst: 2, in_ontwikkeling: 1 }
 const GRADE_SHORT = { expert: 'E', beheerst: 'B', in_ontwikkeling: 'IO' }
@@ -150,7 +151,7 @@ function ClassView({ data }) {
                 </tr>,
                 ...(sec.criteria || []).map(c => (
                   <tr key={c.id}>
-                    <td style={{ fontWeight: 500 }}>{c.name}</td>
+                    <td style={{ fontWeight: 500 }}><MathText text={c.name} /></td>
                     {students.map(s => {
                       const summ = data.summaries[String(s.id)]
                       if (!applies(c, s.route)) return <td key={s.id} style={colStyle}><span style={{ color: '#bbb', fontSize: 12 }}>n.v.t.</span></td>

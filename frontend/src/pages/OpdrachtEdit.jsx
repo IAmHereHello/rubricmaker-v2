@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import * as api from '../api.js'
 import BackButton from '../components/BackButton.jsx'
+import MathText, { MathPreview, MathHint } from '../components/MathText.jsx'
 import {
   ROUTES, LEVELS, newId, emptyLevels, applies, criterionMax, levelsFor,
 } from '../utils/opdracht.js'
@@ -48,8 +49,10 @@ function LevelsGrid({ levels, onChange }) {
             placeholder={`Hoe ziet ${l.label.toLowerCase()} eruit?`}
             style={{ width: '100%', fontSize: 13 }}
           />
+          <MathPreview text={levels?.[l.key]?.text} />
         </div>
       ))}
+      <div style={{ gridColumn: '1 / -1' }}><MathHint /></div>
     </div>
   )
 }
@@ -93,6 +96,7 @@ function CriterionEditor({ criterion, onChange }) {
             onChange={e => set({ name: e.target.value })}
             placeholder="bijv. Staafdiagram"
           />
+          <MathPreview text={criterion.name} />
         </div>
         <div className="field">
           <label>Routes</label>
@@ -347,7 +351,7 @@ export default function OpdrachtEdit({ initialTest }) {
                     title={isOpen ? 'Inklappen' : 'Bewerken'}
                   >
                     <span style={{ color: '#888', width: 12 }}>{isOpen ? '▾' : '▸'}</span>
-                    <span>{c.name || <em className="text-muted">Naamloos onderdeel</em>}</span>
+                    <span>{c.name ? <MathText text={c.name} /> : <em className="text-muted">Naamloos onderdeel</em>}</span>
                     {c.feedback && <span style={{ fontSize: 11, background: '#fee2e2', color: '#991b1b', borderRadius: 4, padding: '1px 6px' }}>Verplicht</span>}
                     <span style={{ display: 'flex', gap: 3 }}>
                       {c.routes.map(r => <span key={r} className={`badge badge-${r}`} style={{ padding: '1px 6px', fontSize: 10 }}>{r[0]}</span>)}

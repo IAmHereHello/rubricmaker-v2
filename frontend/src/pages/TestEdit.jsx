@@ -5,6 +5,7 @@ import BackButton from '../components/BackButton.jsx'
 import { PYRAMID_LEVELS, pyramidLabel, DOMAINS } from '../constants.js'
 import { getCijferConfig } from '../utils/gradingLogic.js'
 import OpdrachtEdit from './OpdrachtEdit.jsx'
+import MathText, { MathPreview, MathHint } from '../components/MathText.jsx'
 
 const ROUTES_ALL = ['oranje', 'geel', 'blauw']
 const EMPTY_Q = { description: '', answer: '', max_score: 1, routes: ['oranje', 'geel', 'blauw'], domain: DOMAINS[0], pyramid_level: PYRAMID_LEVELS[0].value, learning_goal: '', learning_goal_threshold: '' }
@@ -233,6 +234,8 @@ export default function TestEdit() {
               onChange={e => setQForm(f => ({ ...f, description: e.target.value }))}
               rows={3}
             />
+            <MathPreview text={qForm.description} />
+            <MathHint />
           </div>
 
           <div className="field" style={{ marginBottom: 12 }}>
@@ -242,6 +245,7 @@ export default function TestEdit() {
               onChange={e => setQForm(f => ({ ...f, answer: e.target.value }))}
               rows={2}
             />
+            <MathPreview text={qForm.answer} />
           </div>
 
           <div className="form-row">
@@ -285,6 +289,7 @@ export default function TestEdit() {
                 list="goal-names-list"
                 style={{ width: '100%' }}
               />
+              <MathPreview text={qForm.learning_goal} />
               <datalist id="goal-names-list">
                 {[...new Set(
                   test.questions
@@ -356,12 +361,12 @@ export default function TestEdit() {
                 <span style={{ fontSize: 12, background: '#f0f3f8', borderRadius: 4, padding: '2px 7px', color: '#555' }}>{q.domain || '—'}</span>
                 {q.learning_goal && (
                   <span style={{ fontSize: 12, background: '#e8f0fc', borderRadius: 4, padding: '2px 7px', color: '#1a6ecc' }}>
-                    {q.learning_goal}{q.learning_goal_threshold != null ? ` ≥${q.learning_goal_threshold}` : ''}
+                    <MathText text={q.learning_goal} />{q.learning_goal_threshold != null ? ` ≥${q.learning_goal_threshold}` : ''}
                   </span>
                 )}
                 <span style={{ marginLeft: 'auto', fontSize: 13, color: '#555' }}>{q.max_score} pt</span>
               </div>
-              <div style={{ fontSize: 14, marginBottom: 4 }}>{q.description}</div>
+              <div style={{ fontSize: 14, marginBottom: 4 }}><MathText text={q.description} /></div>
               <div style={{ display: 'flex', gap: 4 }}>
                 {(q.routes || []).map(r => <span key={r} className={`badge badge-${r}`}>{r}</span>)}
               </div>
