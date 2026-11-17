@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 
 // The student name as a dropdown of the whole class, with ‹ › for the previous and
-// next student. Stays on the same page (`page`: 'progress' or 'report').
+// next student. Stays on the same page (`page`: 'progress', 'report' or 'leerlingrapport').
 export default function StudentSwitcher({ student, students, page }) {
   const navigate = useNavigate()
   // Until the class list is loaded (or if it fails) the dropdown holds just this student

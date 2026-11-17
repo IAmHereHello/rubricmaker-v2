@@ -9,6 +9,7 @@ import Review from './pages/Review.jsx'
 import EditResult from './pages/EditResult.jsx'
 import StudentProgress from './pages/StudentProgress.jsx'
 import StudentReport from './pages/StudentReport.jsx'
+import Leerlingrapport from './pages/Leerlingrapport.jsx'
 import ClassOverview from './pages/ClassOverview.jsx'
 import ClassRadar from './pages/ClassRadar.jsx'
 import ReportHome from './pages/ReportHome.jsx'
@@ -78,6 +79,7 @@ export default function App() {
         <Route path="/students" element={<Students />} />
         <Route path="/students/:id/progress" element={<StudentProgress />} />
         <Route path="/students/:id/report" element={<StudentReport />} />
+        <Route path="/students/:id/leerlingrapport" element={<Leerlingrapport />} />
         <Route path="/tests" element={<TestList />} />
         <Route path="/tests/:id/edit" element={<TestEdit />} />
         <Route path="/sessions/new" element={<SessionNew />} />
