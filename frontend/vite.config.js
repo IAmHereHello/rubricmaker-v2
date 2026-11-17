@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  // Inline (empty) PostCSS config: stops Vite from picking up a postcss.config.js
+  // from a parent folder, e.g. an unrelated project in ~/rubricmaker on a Mac.
+  css: { postcss: {} },
   build: {
     rollupOptions: {
       output: {
