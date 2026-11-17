@@ -34,6 +34,21 @@ De app is dan bereikbaar op `http://localhost:3000`.
 
 Via Vite's proxy stuurt de frontend alle `/api/...` requests automatisch door naar de backend op poort 8000, dus beide servers moeten tegelijk draaien.
 
+## macOS — lokale installatie voor collega's
+
+Collega's kunnen een eigen, losse kopie op hun Mac draaien (eigen database, niets gedeeld):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/IAmHereHello/rubricmaker-v2/main/mac/rubricmaker.sh | bash
+```
+
+Werkt alleen als deze repo openbaar is. Zie `mac/INSTRUCTIE-COLLEGAS.md` voor de tekst voor collega's.
+
+- Alles komt in `~/Rubricmaker` (`app/`, `data/rubricmaker.db`, `data/backups/`, eigen Node/Python in `tools/`). Geen Homebrew, Xcode of beheerdersrechten nodig.
+- De app `~/Applications/Rubricmaker.app` (met snelkoppeling op het bureaublad) start `backend/local_server.py`: één proces dat de gebouwde frontend en de API onder `/api` serveert op `127.0.0.1:8765` (of de eerstvolgende vrije poort).
+- Bij elke start wordt gekeken of `main` een nieuwe commit heeft. Zo ja: database-backup, nieuwe code downloaden, frontend bouwen, herstarten. Mislukt dat, dan blijft de oude versie werken.
+- Database-migraties (`_migrate_db()`) draaien vanzelf bij het herstarten na een update.
+
 ## Raspberry Pi 5 — productiedraaiing
 
 De `deploy/` map bevat alle bestanden die nodig zijn om de app automatisch te laten starten.
