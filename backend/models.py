@@ -29,6 +29,7 @@ class Test(Base):
     created_at = Column(DateTime, server_default=func.now())
     grading_method = Column(String, nullable=True)   # "points" | "goals" | "cijfer" | null
     grade_config = Column(JSON, nullable=True)        # points/goals: {oranje:{beheerst:N,expert:N},...}; cijfer: {cijfer:{multiplier:9,offset:1}}
+    share_id = Column(String, nullable=True, index=True)  # "family id": copies of the same rubric on colleagues' computers share it
 
     questions = relationship(
         "Question", back_populates="test", cascade="all, delete-orphan",
@@ -51,6 +52,7 @@ class Question(Base):
     pyramid_level = Column(String, nullable=False)  # "reproductie"|"verbinding"|"reflectie"
     learning_goal = Column(String, nullable=True)             # goal name/label; groups questions under the same goal
     learning_goal_threshold = Column(Integer, nullable=True)  # min points to achieve this learning goal; null = not a goal
+    share_key = Column(String, nullable=True)  # stable id of this vraag across shared copies of the rubric
 
     test = relationship("Test", back_populates="questions")
     scores = relationship("Score", back_populates="question", cascade="all, delete-orphan")
@@ -122,6 +124,7 @@ class StudentGrade(Base):
     is_manual = Column(Boolean, default=False)
     review_done = Column(Boolean, default=False)
     stars = Column(Integer, nullable=True, default=0)   # "sterretjes": 0.5 point off each (cijfer grading only)
+    needs_check = Column(Boolean, default=False)        # "te controleren": result changed by a rubric update
 
     session = relationship("Session", back_populates="grades")
     student = relationship("Student", back_populates="grades")
@@ -216,3 +219,32 @@ class StudentNote(Base):
     gesprekspunten = Column(String, nullable=False, default="")
     afspraken = Column(String, nullable=False, default="")
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+# ── Delen met collega's ────────────────────────────────────────────────────────
+# New tables, so create_all() adds them; no migration needed.
+
+class AppSetting(Base):
+    """Small key/value store: teacher name and installation id for results files."""
+    __tablename__ = "app_settings"
+
+    key = Column(String, primary_key=True)
+    value = Column(String, nullable=True)
+
+
+class ComparisonImport(Base):
+    """A colleague's results file, imported on the Vergelijken page.
+
+    One row per (rubric family, colleague installation): importing the same colleague's
+    file again replaces it. `data` holds the whole file (rubric copy + anonymous results)."""
+    __tablename__ = "comparison_imports"
+    __table_args__ = (UniqueConstraint("share_id", "installation_id", name="uq_comparison_source"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    share_id = Column(String, nullable=False, index=True)
+    installation_id = Column(String, nullable=False)
+    teacher_name = Column(String, nullable=False, default="")
+    test_name = Column(String, nullable=False, default="")
+    exported_at = Column(String, nullable=True)
+    imported_at = Column(DateTime, server_default=func.now())
+    data = Column(JSON, nullable=False)

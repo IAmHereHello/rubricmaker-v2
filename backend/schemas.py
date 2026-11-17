@@ -42,6 +42,7 @@ class TestOut(BaseModel):
     created_at: datetime
     grading_method: Optional[str] = None
     grade_config: Optional[dict] = None
+    share_id: Optional[str] = None
     model_config = {"from_attributes": True}
 
 
@@ -213,4 +214,5 @@ class StudentGradeOut(BaseModel):
     is_manual: bool
     review_done: bool
     stars: Optional[int] = 0
+    needs_check: Optional[bool] = False
     model_config = {"from_attributes": True}

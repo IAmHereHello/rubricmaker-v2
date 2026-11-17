@@ -31,6 +31,7 @@ def upsert_student_grade(
         existing.is_manual = body.is_manual
         existing.review_done = body.review_done
         existing.stars = body.stars
+        existing.needs_check = False  # saving the result again counts as checked
         db.commit()
         db.refresh(existing)
         return existing

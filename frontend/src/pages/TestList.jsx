@@ -1,12 +1,17 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
+import TeacherNameDialog from '../components/TeacherNameDialog.jsx'
+import { downloadJson, readJsonFile, safeFileName } from '../utils/shareFiles.js'
 
 export default function TestList() {
   const [tests, setTests] = useState([])
   const [name, setName] = useState('')
   const [kind, setKind] = useState('toets')
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [nameFor, setNameFor] = useState(null)   // test waiting for the teacher's name before exporting results
+  const fileRef = useRef(null)
   const navigate = useNavigate()
 
   useEffect(() => { load() }, [])
@@ -31,13 +36,63 @@ export default function TestList() {
     catch { setError('Verwijderen mislukt.') }
   }
 
+  async function shareRubric(t) {
+    setError(''); setNotice('')
+    try {
+      const file = await api.exportRubricFile(t.id)
+      downloadJson(file, `${safeFileName(t.name)}.rubric`)
+      setNotice(`"${t.name}.rubric" is gedownload. Stuur het bestand naar je collega's; zij kiezen Importeer rubric. Na wijzigingen kun je opnieuw exporteren: bij collega's die de rubric al hebben wordt het een update.`)
+      await load()
+    } catch { setError('Exporteren mislukt.') }
+  }
+
+  async function exportResults(t, nameKnown = false) {
+    setError(''); setNotice('')
+    try {
+      if (!nameKnown) {
+        const { teacher_name } = await api.getShareSettings()
+        if (!teacher_name) { setNameFor(t); return }
+      }
+      const file = await api.exportResultsFile(t.id)
+      const graded = file.classes.reduce((n, c) => n + c.graded, 0)
+      const total = file.classes.reduce((n, c) => n + c.total, 0)
+      if (!file.classes.length) { setError(`"${t.name}" is nog niet nagekeken in een klas.`); return }
+      downloadJson(file, `${safeFileName(t.name)} - resultaten.resultaten`)
+      setNotice(`Resultaten gedownload: ${graded} van ${total} leerlingen nagekeken (zonder namen). Alleen volledig nagekeken leerlingen zitten in het bestand.`)
+      await load()
+    } catch { setError('Exporteren mislukt.') }
+  }
+
+  async function saveName(name) {
+    const t = nameFor
+    setNameFor(null)
+    try { await api.saveShareSettings(name) } catch { setError('Opslaan van je naam mislukt.'); return }
+    exportResults(t, true)
+  }
+
+  async function chooseImport(e) {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f) return
+    try {
+      const data = await readJsonFile(f)
+      navigate('/tests/import', { state: { file: data, fileName: f.name } })
+    } catch (err) { setError(err.message) }
+  }
+
   return (
     <div className="page">
       <div className="page-header">
         <h1>Toetsen</h1>
+        <div className="gap-8">
+          <input ref={fileRef} type="file" accept=".rubric,application/json" style={{ display: 'none' }} onChange={chooseImport} />
+          <button className="btn btn-secondary" onClick={() => fileRef.current?.click()}>Importeer rubric</button>
+        </div>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
+      {notice && <div className="alert alert-success">{notice}</div>}
+      {nameFor && <TeacherNameDialog onSave={saveName} onCancel={() => setNameFor(null)} />}
 
       <div className="card">
         <div className="form-row">
@@ -75,12 +130,19 @@ export default function TestList() {
                   Grote opdracht
                 </span>
               )}
+              {t.share_id && (
+                <span title="Deze rubric is gedeeld met collega's (of van een collega)" style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, background: '#e0f2fe', color: '#075985', borderRadius: 4, padding: '2px 7px', verticalAlign: 'middle' }}>
+                  Gedeeld
+                </span>
+              )}
             </div>
             <div className="text-muted" style={{ marginTop: 2 }}>
               Aangemaakt op {new Date(t.created_at).toLocaleDateString('nl-NL')}
             </div>
           </div>
           <div className="gap-8">
+            <button className="btn btn-secondary btn-sm" onClick={() => shareRubric(t)} title="Download de rubric als bestand voor collega's">Deel rubric</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => exportResults(t)} title="Download de resultaten zonder namen, om te vergelijken in een vergadering">Exporteer resultaten</button>
             <Link to={`/tests/${t.id}/edit`} className="btn btn-secondary btn-sm">Bewerken</Link>
             <button className="btn btn-danger btn-sm" onClick={() => remove(t.id)}>Verwijder</button>
           </div>

@@ -6,6 +6,7 @@ export default function ReportHome() {
   const [sessions, setSessions] = useState([])
   const [testMap, setTestMap] = useState({})
   const [error, setError] = useState('')
+  const [needsCheck, setNeedsCheck] = useState({})
 
   useEffect(() => {
     Promise.all([api.getSessions(), api.getTests()])
@@ -16,6 +17,7 @@ export default function ReportHome() {
         setTestMap(m)
       })
       .catch(() => setError('Fout bij laden van rapporten.'))
+    api.getNeedsCheck().then(setNeedsCheck).catch(() => {})
   }, [])
 
   return (
@@ -45,7 +47,14 @@ export default function ReportHome() {
                 <tr key={sess.id}>
                   <td>{new Date(sess.created_at).toLocaleDateString('nl-NL')}</td>
                   <td>{testMap[sess.test_id] || `Toets ${sess.test_id}`}</td>
-                  <td>{sess.class_name}</td>
+                  <td>
+                    {sess.class_name}
+                    {needsCheck[String(sess.id)]?.length > 0 && (
+                      <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, background: '#fff7e6', color: '#a05800', border: '1px solid #f3d19c', borderRadius: 4, padding: '1px 6px' }}>
+                        {needsCheck[String(sess.id)].length} te controleren
+                      </span>
+                    )}
+                  </td>
                   <td>
                     <Link to={`/reports/session/${sess.id}`} className="btn btn-secondary btn-sm">
                       Rapport bekijken →

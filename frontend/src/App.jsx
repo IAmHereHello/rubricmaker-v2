@@ -19,6 +19,8 @@ import InhalerGrade from './pages/InhalerGrade.jsx'
 import SchoolYearWizard from './pages/SchoolYearWizard.jsx'
 import OpdrachtGrade from './pages/OpdrachtGrade.jsx'
 import OpdrachtReport from './pages/OpdrachtReport.jsx'
+import RubricImport from './pages/RubricImport.jsx'
+import Compare from './pages/Compare.jsx'
 import OpdrachtSwitch from './components/OpdrachtSwitch.jsx'
 import { BackTrailTracker } from './components/BackButton.jsx'
 import * as api from './api.js'
@@ -54,6 +56,7 @@ export default function App() {
         <NavLink to="/sessions/new">Nakijken</NavLink>
         <NavLink to="/inhalers">Inhalers</NavLink>
         <NavLink to="/reports">Rapporten</NavLink>
+        <NavLink to="/compare">Vergelijken</NavLink>
         {showButton && (
           <button
             onClick={() => setWizardOpen(true)}
@@ -81,6 +84,7 @@ export default function App() {
         <Route path="/students/:id/report" element={<StudentReport />} />
         <Route path="/students/:id/leerlingrapport" element={<Leerlingrapport />} />
         <Route path="/tests" element={<TestList />} />
+        <Route path="/tests/import" element={<RubricImport />} />
         <Route path="/tests/:id/edit" element={<TestEdit />} />
         <Route path="/sessions/new" element={<SessionNew />} />
         <Route path="/sessions/:id/grade" element={<OpdrachtSwitch normal={Grade} opdracht={OpdrachtGrade} />} />
@@ -91,6 +95,8 @@ export default function App() {
         <Route path="/inhalers" element={<Inhalers />} />
         <Route path="/sessions/:id/inhaler/:studentId" element={<OpdrachtSwitch normal={InhalerGrade} redirect={p => `/sessions/${p.id}/grade?student=${p.studentId}&from=inhalers`} />} />
         <Route path="/reports" element={<ReportHome />} />
+        <Route path="/compare" element={<Compare />} />
+        <Route path="/compare/:shareId" element={<Compare />} />
         <Route path="/reports/session/:id" element={<OpdrachtSwitch normal={SessionReport} opdracht={OpdrachtReport} />} />
       </Routes>
 
