@@ -469,3 +469,16 @@ Colleagues each run their own copy (Mac installer), so data moves as files. Logi
 - `compute_grade` in `sharing.py` mirrors `computeGrade` in `gradingLogic.js`; keep both in sync.
 - `.resultaten` file (Toetsen → Exporteer resultaten): rubric copy + per klas the fully graded students only, with route, scores per `share_key` (or levels per onderdeel) and grade. No names. Teacher name and an installation id live in `app_settings`.
 - Vergelijken page (`/compare`) stores imported files in `comparison_imports` (one row per family + installation; re-import replaces). Own results are included live. A vraag is compared only when every copy has it with the same max, pyramidelaag, domein and leerdoel; others are listed as "niet vergeleken". Different normering is labelled per docent.
+
+## Klas overdragen (klasovername)
+
+A whole class moves to a colleague as a `.klas` file (Leerlingen → ⋮ → Klas overdragen) and comes back the same way. Logic in `backend/klas_transfer.py`, API in `backend/routers/klas.py` (prefix `/klas`), import screen `frontend/src/pages/ClassImport.jsx` (`/classes/import`, opened from Leerlingen → Importeren → Importeren van collega).
+
+- `Student.share_key` and `Session.share_key` are assigned on first export and kept by imported copies, so a returning class is recognised (update). Rubrics reuse `Test.share_id` / `Question.share_key` from Delen met collega's.
+- The file holds everything: students (route, oudergesprek notes, year snapshots), the chosen toetsafnames with rubric, scores, comments, n.v.t., grades (manual, stars, te controleren), route per session, nakijkvolgorde, inhalers, Grote opdracht state/groups/entries/levels.
+- Import kinds (`inspect`): `update` (known student keys), `choice` (a local class overlaps by names or class name: merge or new class), `new`. Merge links same-name students (tickable; unticked = new student).
+- Update/merge show tick boxes per student and per student per toets (default on, file wins). Empty values in the file never overwrite, nothing is ever deleted. Changed grades get `needs_check`; Grote opdracht grades are recomputed with `sync_grades`.
+- Rubric: same family with the same vragen (signature without texts) is reused; otherwise a separate copy "Naam (van Docent)" with share_id `<family>~<hash of rubric>`, so the same content always lands in the same copy. Rubrics are never changed by a class import.
+- Routes: imported sessions keep the route they were graded with (SessionStudentRoute); the student's current route is the file's when ticked.
+- "Klas daarna bij mij verwijderen" also deletes the class's toetsafnames (`/klas/delete`), unlike plain Klas verwijderen.
+- Klas bewerken popup (`ClassEditDialog.jsx`): class rename (`/klas/rename` also renames sessions), per student name, colour, class, delete; applied on Opslaan. Per-student Bewerken/Verwijder buttons are gone; clicking a colour badge opens the RoutePicker.

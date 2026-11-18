@@ -702,3 +702,96 @@ tr:hover td { background: #fafbfd; }
 }
 .math-hint { font-size: 11px; color: #94a3b8; margin-top: 4px; }
 .math-hint code { background: #f1f5f9; border-radius: 3px; padding: 0 3px; }
+
+/* ── Popups (Klas bewerken, Klas overdragen) ─────────────────────────────── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 200;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 80px 16px 40px;
+  overflow-y: auto;
+}
+
+.modal-card {
+  width: 100%;
+  margin: 0;
+}
+
+.class-edit-table td { vertical-align: top; padding-top: 6px; padding-bottom: 6px; }
+.class-edit-deleted input,
+.class-edit-deleted select { text-decoration: line-through; opacity: .55; }
+
+.btn-icon-danger {
+  background: none;
+  border: 1px solid #f5c6cb;
+  color: #c0392b;
+}
+.btn-icon-danger:hover { background: #fff3f3; }
+
+/* ── ⋮ menu per klas ─────────────────────────────────────────────────────── */
+.kebab {
+  position: relative;
+  display: inline-flex;
+}
+
+.kebab-toggle {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 18px;
+  line-height: 1;
+  padding: 3px 9px;
+  cursor: pointer;
+  color: #444;
+}
+.kebab-toggle:hover,
+.kebab-toggle[aria-expanded="true"] { border-color: #c9d0dc; background: #f5f7fa; }
+
+.kebab-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  min-width: 180px;
+  background: #fff;
+  border: 1px solid #c9d0dc;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(30, 58, 95, .15);
+  padding: 4px;
+}
+
+.kebab-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 5px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  color: #222;
+}
+.kebab-item:hover { background: #f0f3f8; }
+.kebab-item.danger { color: #c0392b; }
+.kebab-item.danger:hover { background: #fff3f3; }
+
+/* ── Klas importeren van collega ─────────────────────────────────────────── */
+.ci-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 0;
+  border-top: 1px solid #eef0f4;
+}
+.ci-item:first-child { border-top: none; }
+.ci-item.off { opacity: .55; }
+.ci-lines { margin: 4px 0 0 0; padding: 0; list-style: none; font-size: 13px; }
+.ci-lines li { margin: 2px 0; }
+.ci-old { color: #a05800; }
+.ci-new { color: #1a7a43; font-weight: 600; }

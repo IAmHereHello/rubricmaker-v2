@@ -197,6 +197,26 @@ export const markSessionChecked = (session_id) =>
   http.put(`/sharing/sessions/${session_id}/checked`).then(r => r.data)
 
 // Error text from the backend (Dutch), or a fallback
+// ── Klas overdragen ───────────────────────────────────────────────────────────
+
+export const getClassTransferOverview = (class_name) =>
+  http.get('/klas/overview', { params: { class_name } }).then(r => r.data)
+
+export const exportClassFile = (class_name, session_ids) =>
+  http.post('/klas/export', { class_name, session_ids }).then(r => r.data)
+
+export const deleteClassAfterTransfer = (class_name) =>
+  http.post('/klas/delete', { class_name }).then(r => r.data)
+
+export const inspectClassFile = (file) => http.post('/klas/inspect', { file }).then(r => r.data)
+
+export const previewClassImport = (body) => http.post('/klas/preview', body).then(r => r.data)
+
+export const applyClassImport = (body) => http.post('/klas/apply', body).then(r => r.data)
+
+export const renameClass = (class_name, new_name) =>
+  http.post('/klas/rename', { class_name, new_name }).then(r => r.data)
+
 export const errorText = (e, fallback) => e?.response?.data?.detail && typeof e.response.data.detail === 'string'
   ? e.response.data.detail
   : fallback

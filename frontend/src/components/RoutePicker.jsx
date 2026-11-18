@@ -7,7 +7,7 @@ const ROUTES = ['oranje', 'geel', 'blauw']
 // another route. `describe(route)` returns { block, confirm } texts: `block` when the new
 // route has no questions (switching is still possible), `confirm` when scores would become
 // n.v.t. Without either, the switch happens right away.
-export default function RoutePicker({ route, studentName, describe, onSwitch, busy }) {
+export default function RoutePicker({ route, studentName, describe, onSwitch, busy, hint = 'Geldt vanaf deze toets. Eerdere toetsen houden hun route.' }) {
   const [open, setOpen] = useState(false)
   const [pending, setPending] = useState(null)   // { route, block, confirm }
   const wrapRef = useRef(null)
@@ -75,7 +75,7 @@ export default function RoutePicker({ route, studentName, describe, onSwitch, bu
                   </button>
                 ))}
               </div>
-              <div className="route-picker-hint">Geldt vanaf deze toets. Eerdere toetsen houden hun route.</div>
+              <div className="route-picker-hint">{hint}</div>
             </>
           ) : (
             <>
