@@ -9,6 +9,7 @@ import { exportRubricsPDF, exportRubricsZip } from '../utils/exportRubric.js'
 import StudentRubric from '../components/StudentRubric.jsx'
 import { GoalRequirement, GoalSummary } from '../components/LearningGoals.jsx'
 import MathText from '../components/MathText.jsx'
+import NeedsCheckBanner from '../components/NeedsCheckBanner.jsx'
 
 function ScoreCell({ sc, maxScore }) {
   if (!sc) return <span className="text-muted">—</span>
@@ -652,6 +653,7 @@ export default function SessionReport() {
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
+      <NeedsCheckBanner sessionId={id} students={data.students} onSelect={sid => { setView('student'); selectStudent(sid) }} />
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         <button

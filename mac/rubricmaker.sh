@@ -21,6 +21,8 @@ set -euo pipefail
 
 REPO_OWNER="IAmHereHello"
 REPO_NAME="rubricmaker-v2"
+# Testversie: installeer met RUBRICMAKER_BRANCH=<branch>; de snelkoppeling blijft die
+# branch volgen tot je opnieuw installeert zonder deze variabele (dan weer main).
 BRANCH="${RUBRICMAKER_BRANCH:-main}"
 MARKER=".rubricmaker-install"
 if [ -n "${RUBRICMAKER_HOME:-}" ]; then
@@ -270,6 +272,7 @@ PLIST
     cat > "$MAC_APP/Contents/MacOS/Rubricmaker" <<LAUNCHER
 #!/bin/bash
 export RUBRICMAKER_HOME="$INSTALL_DIR"
+export RUBRICMAKER_BRANCH="$BRANCH"
 exec /bin/bash "$APP_DIR/mac/rubricmaker.sh" start
 LAUNCHER
     chmod +x "$MAC_APP/Contents/MacOS/Rubricmaker"

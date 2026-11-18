@@ -9,6 +9,7 @@ import { gradeLabel } from '../utils/gradingLogic.js'
 import { exportRubricsPDF, exportRubricsZip } from '../utils/exportRubric.js'
 import { sectionsOf, partOf, applies, PART_LABELS } from '../utils/opdracht.js'
 import MathText from '../components/MathText.jsx'
+import NeedsCheckBanner from '../components/NeedsCheckBanner.jsx'
 
 const GRADE_RANK = { expert: 3, beheerst: 2, in_ontwikkeling: 1 }
 const GRADE_SHORT = { expert: 'E', beheerst: 'B', in_ontwikkeling: 'IO' }
@@ -311,6 +312,7 @@ export default function OpdrachtReport({ sessionId }) {
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
+      <NeedsCheckBanner sessionId={sessionId} students={data.students} onSelect={sid => { setView('student'); selectStudent(sid) }} />
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         {[['student', 'Per leerling'], ['class', 'Klassenoverzicht'], ['results', 'Resultaten']].map(([k, label]) => (

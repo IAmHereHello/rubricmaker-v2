@@ -4,7 +4,7 @@ from sqlalchemy import text
 
 from .database import engine
 from . import models
-from .routers import students, tests, questions, sessions, scores, progress, reports, grades, school_year, opdracht, leerlingrapport
+from .routers import students, tests, questions, sessions, scores, progress, reports, grades, school_year, opdracht, leerlingrapport, sharing
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -21,6 +21,10 @@ def _migrate_db():
             "ALTER TABLE sessions ADD COLUMN stack_closed BOOLEAN DEFAULT 0",
             "ALTER TABLE scores ADD COLUMN comment TEXT",
             "ALTER TABLE student_grades ADD COLUMN stars INTEGER DEFAULT 0",
+            # Delen met collega's
+            "ALTER TABLE tests ADD COLUMN share_id TEXT",
+            "ALTER TABLE questions ADD COLUMN share_key TEXT",
+            "ALTER TABLE student_grades ADD COLUMN needs_check BOOLEAN DEFAULT 0",
         ]:
             try:
                 conn.execute(text(stmt))
@@ -64,6 +68,7 @@ app.include_router(grades.router)
 app.include_router(school_year.router)
 app.include_router(opdracht.router)
 app.include_router(leerlingrapport.router)
+app.include_router(sharing.router)
 
 
 @app.get("/")

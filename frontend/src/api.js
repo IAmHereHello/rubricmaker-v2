@@ -151,3 +151,52 @@ export const setOpdrachtLevel = (session_id, data) =>
 
 export const getOpdrachtUsage = (test_id) =>
   http.get(`/opdracht/tests/${test_id}/usage`).then(r => r.data)
+
+// ── Delen met collega's ───────────────────────────────────────────────────────
+
+export const getShareSettings = () => http.get('/sharing/settings').then(r => r.data)
+
+export const saveShareSettings = (teacher_name) =>
+  http.put('/sharing/settings', { teacher_name }).then(r => r.data)
+
+export const exportRubricFile = (test_id) =>
+  http.get(`/sharing/tests/${test_id}/rubric`).then(r => r.data)
+
+export const exportResultsFile = (test_id) =>
+  http.get(`/sharing/tests/${test_id}/results`).then(r => r.data)
+
+export const inspectRubricFile = (file) =>
+  http.post('/sharing/rubric/inspect', { file }).then(r => r.data)
+
+export const importRubricFile = (file) =>
+  http.post('/sharing/rubric/import', { file }).then(r => r.data)
+
+export const previewRubricUpdate = (file, accept) =>
+  http.post('/sharing/rubric/update/preview', { file, accept }).then(r => r.data)
+
+export const applyRubricUpdate = (file, accept) =>
+  http.post('/sharing/rubric/update/apply', { file, accept }).then(r => r.data)
+
+export const importResultsFile = (file) =>
+  http.post('/sharing/compare/import', { file }).then(r => r.data)
+
+export const getComparisons = () => http.get('/sharing/compare').then(r => r.data)
+
+export const getComparison = (share_id, route) =>
+  http.get(`/sharing/compare/${share_id}`, { params: route ? { route } : {} }).then(r => r.data)
+
+export const deleteComparisonImport = (id) =>
+  http.delete(`/sharing/compare/import/${id}`).then(r => r.data)
+
+export const getNeedsCheck = () => http.get('/sharing/needs-check').then(r => r.data)
+
+export const markStudentChecked = (session_id, student_id) =>
+  http.put(`/sharing/sessions/${session_id}/students/${student_id}/checked`).then(r => r.data)
+
+export const markSessionChecked = (session_id) =>
+  http.put(`/sharing/sessions/${session_id}/checked`).then(r => r.data)
+
+// Error text from the backend (Dutch), or a fallback
+export const errorText = (e, fallback) => e?.response?.data?.detail && typeof e.response.data.detail === 'string'
+  ? e.response.data.detail
+  : fallback
