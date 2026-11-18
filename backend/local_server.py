@@ -28,11 +28,19 @@ class SPAStaticFiles(StaticFiles):
 
     async def get_response(self, path, scope):
         try:
-            return await super().get_response(path, scope)
+            response = await super().get_response(path, scope)
         except HTTPException as exc:
             if exc.status_code != 404:
                 raise
-            return await super().get_response("index.html", scope)
+            response = await super().get_response("index.html", scope)
+        # Built files in assets/ have a hash in their name, so they never change and
+        # may be cached. Everything else (index.html) must be checked on every load,
+        # otherwise the browser keeps showing an old version after an update.
+        if path.startswith("assets/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        else:
+            response.headers["Cache-Control"] = "no-cache"
+        return response
 
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
