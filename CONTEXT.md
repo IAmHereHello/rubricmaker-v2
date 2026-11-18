@@ -457,3 +457,15 @@ The app is at `http://localhost:3000`. Both servers must be running simultaneous
 - `frontend/node_modules/` and `frontend/dist/` are also gitignored.
 - `.claude/launch.json` exists in the project root for running the Vite dev server from within Claude Code's preview panel. It points `cwd` to `frontend/` and uses `npm run dev` on port 3000.
 - On the Pi in production, build the frontend with `npm run build` inside `frontend/` and serve `frontend/dist/` as a static site. Run the backend as a systemd service. See `README.md` for the full systemd unit file.
+
+---
+
+## Delen met collega's (rubrics en resultaten)
+
+Colleagues each run their own copy (Mac installer), so data moves as files. Logic in `backend/sharing.py`, API in `backend/routers/sharing.py` (prefix `/sharing`).
+
+- `Test.share_id` ("family id") and `Question.share_key` are assigned on first export and kept by imported copies, so copies of one rubric are recognised even after edits. Grote opdracht onderdelen already have stable ids in `grade_config`.
+- `.rubric` file (Toetsen → Deel rubric). Importing a file whose `share_id` is unknown creates a copy; a known one opens the update screen (`/tests/import`): per vraag/onderdeel new / changed / not in the file, tick boxes, optional "move scores to vraag X". Preview runs the update in a transaction and rolls back. Lower maxima cap scores. Students whose result changes (or got capped) get `StudentGrade.needs_check` ("te controleren"), shown in Rapporten and the session report; saving the grade again clears it. Manual grades are kept but flagged.
+- `compute_grade` in `sharing.py` mirrors `computeGrade` in `gradingLogic.js`; keep both in sync.
+- `.resultaten` file (Toetsen → Exporteer resultaten): rubric copy + per klas the fully graded students only, with route, scores per `share_key` (or levels per onderdeel) and grade. No names. Teacher name and an installation id live in `app_settings`.
+- Vergelijken page (`/compare`) stores imported files in `comparison_imports` (one row per family + installation; re-import replaces). Own results are included live. A vraag is compared only when every copy has it with the same max, pyramidelaag, domein and leerdoel; others are listed as "niet vergeleken". Different normering is labelled per docent.
