@@ -29,7 +29,8 @@ export default function TestEdit() {
   const [gradingSaved, setGradingSaved] = useState(false)
   const [qFormBase, setQFormBase] = useState(null)   // qForm as it was when the form opened
   const [gradingBase, setGradingBase] = useState(null) // grading settings as last loaded/saved
-  const [savedChanges, setSavedChanges] = useState(false)
+  const [saveCount, setSaveCount] = useState(0)   // saved changes this visit
+  const [askCount, setAskCount] = useState(0)     // Opslaan clicks that saved: ask to share right away
   const gradingKey = JSON.stringify(gradingMethod === 'cijfer' ? [gradingMethod, cijferForm] : gradingMethod ? [gradingMethod, gradeConfig] : null)
 
   useEffect(() => { if (test && gradingBase === null) setGradingBase(gradingKey) }, [test])  // eslint-disable-line react-hooks/exhaustive-deps
@@ -41,8 +42,9 @@ export default function TestEdit() {
     (gradingBase !== null && gradingKey !== gradingBase)
   )
 
-  function changed() {
-    setSavedChanges(true)
+  function changed({ ask = false } = {}) {
+    setSaveCount(n => n + 1)
+    if (ask) setAskCount(n => n + 1)
     markUnshared(test)
   }
 
@@ -136,7 +138,7 @@ export default function TestEdit() {
       setTest(t)
       setEditingQ(null)
       setQFormBase(null)
-      changed()
+      changed({ ask: true })
     } catch { setError('Opslaan mislukt.') }
   }
 
@@ -198,7 +200,7 @@ export default function TestEdit() {
       setGradingSaved(true)
       setGradingBase(gradingKey)
       setTimeout(() => setGradingSaved(false), 2000)
-      changed()
+      changed({ ask: true })
     } catch { setGradingError('Opslaan mislukt.') }
   }
 
@@ -222,7 +224,7 @@ export default function TestEdit() {
 
   return (
     <div className="page">
-      <ShareLeaveGuard test={test} unsaved={unsaved} savedChanges={savedChanges} />
+      <ShareLeaveGuard test={test} unsaved={unsaved} saveCount={saveCount} askCount={askCount} />
       <div className="page-header">
         <div>
           {nameEdit ? (

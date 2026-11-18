@@ -171,7 +171,7 @@ export default function OpdrachtEdit({ initialTest }) {
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [savedChanges, setSavedChanges] = useState(false)
+  const [saveCount, setSaveCount] = useState(0)   // Opslaan clicks that saved; each asks to share
 
   useEffect(() => { api.getOpdrachtUsage(test.id).then(setUsage).catch(() => {}) }, [test.id])
 
@@ -298,7 +298,7 @@ export default function OpdrachtEdit({ initialTest }) {
       setSections(clone(updated.grade_config?.opdracht?.sections || []))
       setDirty(false)
       setSaved(true)
-      setSavedChanges(true)
+      setSaveCount(n => n + 1)
       markUnshared(updated)
       api.getOpdrachtUsage(test.id).then(setUsage).catch(() => {})
     } catch {
@@ -310,7 +310,7 @@ export default function OpdrachtEdit({ initialTest }) {
 
   return (
     <div className="page" style={{ paddingBottom: 90 }}>
-      <ShareLeaveGuard test={test} unsaved={dirty} savedChanges={savedChanges} />
+      <ShareLeaveGuard test={test} unsaved={dirty} saveCount={saveCount} askCount={saveCount} />
       <div className="page-header">
         <div style={{ flex: 1 }}>
           <div className="text-muted" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 4 }}>

@@ -27,23 +27,33 @@ export function clearUnshared(testId) {
 }
 
 // ── Guard for the rubric edit pages ──
-// Leaving the page (menu, Terug, browser back arrow):
-//   1. with unsaved edits: "Toch weggaan?" (Blijven / Weggaan zonder opslaan);
-//   2. then, if this visit saved a change to a shared rubric: "Wil je deze update delen?".
-// Closing or reloading the tab with unsaved edits shows the browser's own warning.
+// Share question "Wil je deze update delen?" for a shared rubric (share_id set):
+//   - right after an Opslaan click (parent bumps `askCount`);
+//   - when leaving the page (menu, Terug, browser back arrow) with saved changes not yet answered.
+// Unsaved edits ask "Toch weggaan?" first (Blijven / Weggaan zonder opslaan); closing or
+// reloading the tab with unsaved edits shows the browser's own warning.
+// "Nee" keeps quiet for the rest of this visit; after "Ja" only later saves ask again.
+// `saveCount` counts every saved change in this visit.
 // Render only one guard per page: the router supports a single blocker at a time.
-export default function ShareLeaveGuard({ test, unsaved, savedChanges }) {
+export default function ShareLeaveGuard({ test, unsaved, saveCount = 0, askCount = 0 }) {
   const shared = !!test?.share_id
-  const askShare = shared && savedChanges
+  const [answeredAt, setAnsweredAt] = useState(0)   // saveCount covered by the last Ja
+  const [declined, setDeclined] = useState(false)
+  const askShare = shared && !declined && saveCount > answeredAt
   const blocker = useBlocker(({ currentLocation, nextLocation }) =>
     (unsaved || askShare) && currentLocation.pathname !== nextLocation.pathname)
   const [step, setStep] = useState(null)    // null | 'unsaved' | 'ask' | 'busy' | 'done' | 'error'
   const [fileName, setFileName] = useState('')
+  const leaving = blocker.state === 'blocked'
 
   useEffect(() => {
-    if (blocker.state === 'blocked' && step === null) setStep(unsaved ? 'unsaved' : 'ask')
-    if (blocker.state !== 'blocked' && step !== null) setStep(null)
+    if (leaving && step === null) setStep(unsaved ? 'unsaved' : 'ask')
+    if (!leaving && blocker.state !== 'unblocked' && step !== null) setStep(null)
   }, [blocker.state])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (askCount > 0 && shared && !declined) setStep('ask')
+  }, [askCount])  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!unsaved) return
@@ -53,9 +63,9 @@ export default function ShareLeaveGuard({ test, unsaved, savedChanges }) {
   }, [unsaved])
 
   function stay() { setStep(null); blocker.reset?.() }
-  function leave() { setStep(null); blocker.proceed?.() }
-  function leaveWithoutSaving() { askShare ? setStep('ask') : leave() }
-  function decline() { clearUnshared(test.id); leave() }
+  function close() { setStep(null); if (leaving) blocker.proceed?.() }
+  function leaveWithoutSaving() { askShare ? setStep('ask') : close() }
+  function decline() { clearUnshared(test.id); setDeclined(true); close() }
 
   async function share() {
     setStep('busy')
@@ -64,6 +74,7 @@ export default function ShareLeaveGuard({ test, unsaved, savedChanges }) {
       const name = `${safeFileName(file?.rubric?.name || test.name)}.rubric`
       downloadJson(file, name)
       clearUnshared(test.id)
+      setAnsweredAt(saveCount)
       setFileName(name)
       setStep('done')
     } catch {
@@ -71,7 +82,7 @@ export default function ShareLeaveGuard({ test, unsaved, savedChanges }) {
     }
   }
 
-  if (!step || blocker.state !== 'blocked') return null
+  if (!step) return null
   return (
     <div className="modal-backdrop">
       <div className="card modal-card" style={{ maxWidth: 460 }} role="dialog" aria-modal="true">
@@ -96,14 +107,14 @@ export default function ShareLeaveGuard({ test, unsaved, savedChanges }) {
           <p style={{ marginBottom: 8 }}>"{fileName}" staat in je Downloads.</p>
           <p style={{ marginBottom: 16 }}>Stuur dit bestand naar je collega's, bijvoorbeeld per mail. Zij kiezen Toetsen → Importeer rubric; bij wie de rubric al heeft wordt het een update.</p>
           <div className="gap-8" style={{ justifyContent: 'flex-end' }}>
-            <button className="btn btn-primary" onClick={leave} autoFocus>OK</button>
+            <button className="btn btn-primary" onClick={close} autoFocus>OK</button>
           </div>
         </>}
         {step === 'error' && <>
           <h2 style={{ fontSize: 16, marginBottom: 8 }}>Downloaden mislukt</h2>
           <p style={{ marginBottom: 16 }}>Het updatebestand kon niet worden gemaakt. Je kunt het later downloaden via Toetsen → Deel rubric.</p>
           <div className="gap-8" style={{ justifyContent: 'flex-end' }}>
-            <button className="btn btn-primary" onClick={leave}>OK</button>
+            <button className="btn btn-primary" onClick={close}>OK</button>
           </div>
         </>}
       </div>
