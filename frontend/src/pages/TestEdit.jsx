@@ -5,6 +5,7 @@ import BackButton from '../components/BackButton.jsx'
 import { PYRAMID_LEVELS, pyramidLabel, DOMAINS } from '../constants.js'
 import { getCijferConfig } from '../utils/gradingLogic.js'
 import OpdrachtEdit from './OpdrachtEdit.jsx'
+import { useShareUpdatePrompt } from '../components/ShareUpdatePrompt.jsx'
 import MathText, { MathPreview, MathHint } from '../components/MathText.jsx'
 
 const ROUTES_ALL = ['oranje', 'geel', 'blauw']
@@ -26,6 +27,7 @@ export default function TestEdit() {
   const [cijferForm, setCijferForm] = useState({ multiplier: '9', offset: '1' })
   const [gradingError, setGradingError] = useState('')
   const [gradingSaved, setGradingSaved] = useState(false)
+  const sharePrompt = useShareUpdatePrompt(test)
 
   useEffect(() => {
     api.getTest(id)
@@ -56,6 +58,7 @@ export default function TestEdit() {
       setTest(t => ({ ...t, name: updated.name }))
       setTestName(updated.name)
       setNameEdit(false)
+      sharePrompt.changed()
     } catch { setError('Opslaan mislukt.') }
   }
 
@@ -115,6 +118,7 @@ export default function TestEdit() {
       const t = await api.getTest(id)
       setTest(t)
       setEditingQ(null)
+      sharePrompt.changed()
     } catch { setError('Opslaan mislukt.') }
   }
 
@@ -123,6 +127,7 @@ export default function TestEdit() {
     try {
       await api.deleteQuestion(qid)
       setTest(await api.getTest(id))
+      sharePrompt.changed()
     } catch { setError('Verwijderen mislukt.') }
   }
 
@@ -174,6 +179,7 @@ export default function TestEdit() {
       setTest(t => ({ ...t, grading_method: updated.grading_method, grade_config: updated.grade_config }))
       setGradingSaved(true)
       setTimeout(() => setGradingSaved(false), 2000)
+      sharePrompt.changed()
     } catch { setGradingError('Opslaan mislukt.') }
   }
 
@@ -186,6 +192,7 @@ export default function TestEdit() {
     try {
       await api.reorderQuestions(reorderItems)
       setTest(await api.getTest(id))
+      sharePrompt.changed()
     } catch { setError('Volgorde opslaan mislukt.') }
   }
 
@@ -196,6 +203,7 @@ export default function TestEdit() {
 
   return (
     <div className="page">
+      {sharePrompt.dialog}
       <div className="page-header">
         <div>
           {nameEdit ? (

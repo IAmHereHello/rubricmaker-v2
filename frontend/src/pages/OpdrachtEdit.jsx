@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import * as api from '../api.js'
+import { useShareUpdatePrompt } from '../components/ShareUpdatePrompt.jsx'
 import BackButton from '../components/BackButton.jsx'
 import MathText, { MathPreview, MathHint } from '../components/MathText.jsx'
 import {
@@ -170,6 +171,7 @@ export default function OpdrachtEdit({ initialTest }) {
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
+  const sharePrompt = useShareUpdatePrompt(test)
 
   useEffect(() => { api.getOpdrachtUsage(test.id).then(setUsage).catch(() => {}) }, [test.id])
 
@@ -296,6 +298,7 @@ export default function OpdrachtEdit({ initialTest }) {
       setSections(clone(updated.grade_config?.opdracht?.sections || []))
       setDirty(false)
       setSaved(true)
+      sharePrompt.changed()
       api.getOpdrachtUsage(test.id).then(setUsage).catch(() => {})
     } catch {
       setError('Opslaan mislukt.')
@@ -306,6 +309,7 @@ export default function OpdrachtEdit({ initialTest }) {
 
   return (
     <div className="page" style={{ paddingBottom: 90 }}>
+      {sharePrompt.dialog}
       <div className="page-header">
         <div style={{ flex: 1 }}>
           <div className="text-muted" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 4 }}>
