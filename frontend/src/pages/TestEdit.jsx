@@ -5,6 +5,7 @@ import BackButton from '../components/BackButton.jsx'
 import { PYRAMID_LEVELS, pyramidLabel, DOMAINS } from '../constants.js'
 import { getCijferConfig } from '../utils/gradingLogic.js'
 import OpdrachtEdit from './OpdrachtEdit.jsx'
+import ShareLeaveGuard, { markUnshared } from '../components/ShareUpdatePrompt.jsx'
 import MathText, { MathPreview, MathHint } from '../components/MathText.jsx'
 
 const ROUTES_ALL = ['oranje', 'geel', 'blauw']
@@ -26,6 +27,24 @@ export default function TestEdit() {
   const [cijferForm, setCijferForm] = useState({ multiplier: '9', offset: '1' })
   const [gradingError, setGradingError] = useState('')
   const [gradingSaved, setGradingSaved] = useState(false)
+  const [qFormBase, setQFormBase] = useState(null)   // qForm as it was when the form opened
+  const [gradingBase, setGradingBase] = useState(null) // grading settings as last loaded/saved
+  const [savedChanges, setSavedChanges] = useState(false)
+  const gradingKey = JSON.stringify(gradingMethod === 'cijfer' ? [gradingMethod, cijferForm] : gradingMethod ? [gradingMethod, gradeConfig] : null)
+
+  useEffect(() => { if (test && gradingBase === null) setGradingBase(gradingKey) }, [test])  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (editingQ !== null && qFormBase === null) setQFormBase(JSON.stringify(qForm)) }, [editingQ])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  const unsaved = !!test && (
+    (editingQ !== null && qFormBase !== null && JSON.stringify(qForm) !== qFormBase) ||
+    (nameEdit && testName.trim() !== test.name) ||
+    (gradingBase !== null && gradingKey !== gradingBase)
+  )
+
+  function changed() {
+    setSavedChanges(true)
+    markUnshared(test)
+  }
 
   useEffect(() => {
     api.getTest(id)
@@ -56,6 +75,7 @@ export default function TestEdit() {
       setTest(t => ({ ...t, name: updated.name }))
       setTestName(updated.name)
       setNameEdit(false)
+      changed()
     } catch { setError('Opslaan mislukt.') }
   }
 
@@ -81,7 +101,7 @@ export default function TestEdit() {
     setError('')
   }
 
-  function cancelQ() { setEditingQ(null); setError('') }
+  function cancelQ() { setEditingQ(null); setQFormBase(null); setError('') }
 
   function toggleRoute(r) {
     setQForm(f => {
@@ -115,6 +135,8 @@ export default function TestEdit() {
       const t = await api.getTest(id)
       setTest(t)
       setEditingQ(null)
+      setQFormBase(null)
+      changed()
     } catch { setError('Opslaan mislukt.') }
   }
 
@@ -123,6 +145,7 @@ export default function TestEdit() {
     try {
       await api.deleteQuestion(qid)
       setTest(await api.getTest(id))
+      changed()
     } catch { setError('Verwijderen mislukt.') }
   }
 
@@ -173,7 +196,9 @@ export default function TestEdit() {
       const updated = await api.updateTest(id, payload)
       setTest(t => ({ ...t, grading_method: updated.grading_method, grade_config: updated.grade_config }))
       setGradingSaved(true)
+      setGradingBase(gradingKey)
       setTimeout(() => setGradingSaved(false), 2000)
+      changed()
     } catch { setGradingError('Opslaan mislukt.') }
   }
 
@@ -186,6 +211,7 @@ export default function TestEdit() {
     try {
       await api.reorderQuestions(reorderItems)
       setTest(await api.getTest(id))
+      changed()
     } catch { setError('Volgorde opslaan mislukt.') }
   }
 
@@ -196,6 +222,7 @@ export default function TestEdit() {
 
   return (
     <div className="page">
+      <ShareLeaveGuard test={test} unsaved={unsaved} savedChanges={savedChanges} />
       <div className="page-header">
         <div>
           {nameEdit ? (

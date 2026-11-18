@@ -17,6 +17,7 @@ def _serialize_test(t: Test) -> dict:
         "created_at": t.created_at,
         "grading_method": t.grading_method,
         "grade_config": t.grade_config,
+        "share_id": t.share_id,
         "questions": sorted(
             [
                 {
