@@ -1,9 +1,38 @@
 import { useState, useEffect, useRef } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
 import TeacherNameDialog from '../components/TeacherNameDialog.jsx'
 import { downloadJson, readJsonFile, safeFileName } from '../utils/shareFiles.js'
-import { getUnshared, clearUnshared } from '../components/ShareUpdatePrompt.jsx'
+import { getUnshared, clearUnshared, UpdateDownloadedDialog } from '../components/ShareUpdatePrompt.jsx'
+
+// ⋮ menu at the right of a toets: Bewerken, Deel rubric, Exporteer resultaten, Verwijder
+function TestMenu({ onEdit, onShare, onExport, onDelete }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    const onDown = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    const onKey = e => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
+  }, [open])
+  const pick = fn => e => { e.stopPropagation(); setOpen(false); fn() }
+  return (
+    <span className="kebab" ref={ref} onClick={e => e.stopPropagation()}>
+      <button type="button" className="kebab-toggle" title="Meer acties" aria-haspopup="true" aria-expanded={open}
+        onClick={() => setOpen(o => !o)}>⋮</button>
+      {open && (
+        <div className="kebab-menu" role="menu">
+          <button type="button" className="kebab-item" role="menuitem" onClick={pick(onEdit)}>Bewerken</button>
+          <button type="button" className="kebab-item" role="menuitem" onClick={pick(onShare)} title="Download de rubric als bestand voor collega's">Deel rubric</button>
+          <button type="button" className="kebab-item" role="menuitem" onClick={pick(onExport)} title="Download de resultaten zonder namen, om te vergelijken in een vergadering">Exporteer resultaten</button>
+          <button type="button" className="kebab-item danger" role="menuitem" onClick={pick(onDelete)}>Verwijder</button>
+        </div>
+      )}
+    </span>
+  )
+}
 
 export default function TestList() {
   const [tests, setTests] = useState([])
@@ -14,6 +43,7 @@ export default function TestList() {
   const [nameFor, setNameFor] = useState(null)   // test waiting for the teacher's name before exporting results
   const fileRef = useRef(null)
   const [unshared, setUnshared] = useState(getUnshared)
+  const [downloaded, setDownloaded] = useState(null)   // file name for the "Update gedownload" popup
   const navigate = useNavigate()
 
   useEffect(() => { load() }, [])
@@ -47,6 +77,18 @@ export default function TestList() {
       setUnshared(getUnshared())
       setNotice(`"${t.name}.rubric" is gedownload. Stuur het bestand naar je collega's; zij kiezen Importeer rubric. Na wijzigingen kun je opnieuw exporteren: bij collega's die de rubric al hebben wordt het een update.`)
       await load()
+    } catch { setError('Exporteren mislukt.') }
+  }
+
+  async function shareUpdates(t) {
+    setError(''); setNotice('')
+    try {
+      const file = await api.exportRubricFile(t.id)
+      const fileName = `${safeFileName(t.name)}.rubric`
+      downloadJson(file, fileName)
+      clearUnshared(t.id)
+      setUnshared(getUnshared())
+      setDownloaded(fileName)
     } catch { setError('Exporteren mislukt.') }
   }
 
@@ -96,6 +138,7 @@ export default function TestList() {
 
       {error && <div className="alert alert-error">{error}</div>}
       {notice && <div className="alert alert-success">{notice}</div>}
+      {downloaded && <UpdateDownloadedDialog fileName={downloaded} onClose={() => setDownloaded(null)} />}
       {nameFor && <TeacherNameDialog onSave={saveName} onCancel={() => setNameFor(null)} />}
 
       <div className="card">
@@ -124,39 +167,43 @@ export default function TestList() {
         <div className="card text-muted">Nog geen toetsen.</div>
       )}
 
-      {tests.map(t => (
-        <div key={t.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 15 }}>
-              {t.name}
-              {t.grading_method === 'opdracht' && (
-                <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, background: '#ede9fe', color: '#5b21b6', borderRadius: 4, padding: '2px 7px', verticalAlign: 'middle' }}>
-                  Grote opdracht
-                </span>
-              )}
-              {t.share_id && (
-                <span title="Deze rubric is gedeeld met collega's (of van een collega)" style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, background: '#e0f2fe', color: '#075985', borderRadius: 4, padding: '2px 7px', verticalAlign: 'middle' }}>
-                  Gedeeld
-                </span>
-              )}
-              {t.share_id && unshared.has(t.id) && (
-                <span title="Je hebt deze rubric aangepast en de update nog niet met collega's gedeeld. Klik op Deel rubric om het updatebestand te downloaden." style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, background: '#ffedd5', color: '#9a3412', borderRadius: 4, padding: '2px 7px', verticalAlign: 'middle' }}>
-                  Gewijzigd, nog niet gedeeld
-                </span>
-              )}
+      {tests.map(t => {
+        const edited = !!t.share_id && unshared.has(t.id)
+        return (
+          <div key={t.id} className="card test-card" onClick={() => navigate(`/tests/${t.id}/edit`)}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>
+                {t.name}
+                {t.grading_method === 'opdracht' && (
+                  <span className="test-tag" style={{ background: '#ede9fe', color: '#5b21b6' }}>Grote opdracht</span>
+                )}
+                {t.share_id && !edited && (
+                  <span className="test-tag" title="Deze rubric is gedeeld met collega's (of van een collega)" style={{ background: '#e0f2fe', color: '#075985' }}
+                    onClick={e => e.stopPropagation()}>Gedeeld</span>
+                )}
+                {edited && (
+                  <span className="test-tag" title="Je hebt deze gedeelde rubric bewerkt en de update nog niet met collega's gedeeld." style={{ background: '#fee2e2', color: '#b91c1c' }}
+                    onClick={e => e.stopPropagation()}>Gedeeld, bewerkt</span>
+                )}
+              </div>
+              <div className="text-muted" style={{ marginTop: 2 }}>
+                Aangemaakt op {new Date(t.created_at).toLocaleDateString('nl-NL')}
+              </div>
             </div>
-            <div className="text-muted" style={{ marginTop: 2 }}>
-              Aangemaakt op {new Date(t.created_at).toLocaleDateString('nl-NL')}
+            <div className="gap-8" onClick={e => e.stopPropagation()}>
+              {edited && (
+                <button className="btn btn-primary btn-sm" onClick={() => shareUpdates(t)} title="Download het updatebestand voor je collega's">Deel updates</button>
+              )}
+              <TestMenu
+                onEdit={() => navigate(`/tests/${t.id}/edit`)}
+                onShare={() => shareRubric(t)}
+                onExport={() => exportResults(t)}
+                onDelete={() => remove(t.id)}
+              />
             </div>
           </div>
-          <div className="gap-8">
-            <button className="btn btn-secondary btn-sm" onClick={() => shareRubric(t)} title="Download de rubric als bestand voor collega's">Deel rubric</button>
-            <button className="btn btn-secondary btn-sm" onClick={() => exportResults(t)} title="Download de resultaten zonder namen, om te vergelijken in een vergadering">Exporteer resultaten</button>
-            <Link to={`/tests/${t.id}/edit`} className="btn btn-secondary btn-sm">Bewerken</Link>
-            <button className="btn btn-danger btn-sm" onClick={() => remove(t.id)}>Verwijder</button>
-          </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

@@ -3,7 +3,7 @@ import { useBlocker } from 'react-router-dom'
 import * as api from '../api.js'
 import { downloadJson, safeFileName } from '../utils/shareFiles.js'
 
-// ── "Gewijzigd, nog niet gedeeld" label (Toetsen page), kept in this browser ──
+// ── "Gedeeld, bewerkt" tag (Toetsen page): shared rubric saved since it was last shared. Kept in this browser ──
 const KEY = 'rubricmaker.unsharedChanges'
 
 export function getUnshared() {
@@ -32,7 +32,7 @@ export function clearUnshared(testId) {
 //   - when leaving the page (menu, Terug, browser back arrow) with saved changes not yet answered.
 // Unsaved edits ask "Toch weggaan?" first (Blijven / Weggaan zonder opslaan); closing or
 // reloading the tab with unsaved edits shows the browser's own warning.
-// "Nee" keeps quiet for the rest of this visit; after "Ja" only later saves ask again.
+// "Nee" keeps quiet for the rest of this visit (the tag on Toetsen stays); after "Ja" only later saves ask again.
 // `saveCount` counts every saved change in this visit.
 // Render only one guard per page: the router supports a single blocker at a time.
 export default function ShareLeaveGuard({ test, unsaved, saveCount = 0, askCount = 0 }) {
@@ -65,7 +65,7 @@ export default function ShareLeaveGuard({ test, unsaved, saveCount = 0, askCount
   function stay() { setStep(null); blocker.reset?.() }
   function close() { setStep(null); if (leaving) blocker.proceed?.() }
   function leaveWithoutSaving() { askShare ? setStep('ask') : close() }
-  function decline() { clearUnshared(test.id); setDeclined(true); close() }
+  function decline() { setDeclined(true); close() }   // the "Gedeeld, bewerkt" tag stays as a reminder
 
   async function share() {
     setStep('busy')
@@ -102,14 +102,7 @@ export default function ShareLeaveGuard({ test, unsaved, saveCount = 0, askCount
             <button className="btn btn-primary" onClick={share} disabled={step === 'busy'} autoFocus>Ja</button>
           </div>
         </>}
-        {step === 'done' && <>
-          <h2 style={{ fontSize: 16, marginBottom: 8 }}>Update gedownload</h2>
-          <p style={{ marginBottom: 8 }}>"{fileName}" staat in je Downloads.</p>
-          <p style={{ marginBottom: 16 }}>Stuur dit bestand naar je collega's, bijvoorbeeld per mail. Zij kiezen Toetsen → Importeer rubric; bij wie de rubric al heeft wordt het een update.</p>
-          <div className="gap-8" style={{ justifyContent: 'flex-end' }}>
-            <button className="btn btn-primary" onClick={close} autoFocus>OK</button>
-          </div>
-        </>}
+        {step === 'done' && <UpdateDownloadedBody fileName={fileName} onClose={close} />}
         {step === 'error' && <>
           <h2 style={{ fontSize: 16, marginBottom: 8 }}>Downloaden mislukt</h2>
           <p style={{ marginBottom: 16 }}>Het updatebestand kon niet worden gemaakt. Je kunt het later downloaden via Toetsen → Deel rubric.</p>
@@ -117,6 +110,28 @@ export default function ShareLeaveGuard({ test, unsaved, saveCount = 0, askCount
             <button className="btn btn-primary" onClick={close}>OK</button>
           </div>
         </>}
+      </div>
+    </div>
+  )
+}
+
+function UpdateDownloadedBody({ fileName, onClose }) {
+  return <>
+    <h2 style={{ fontSize: 16, marginBottom: 8 }}>Update gedownload</h2>
+    <p style={{ marginBottom: 8 }}>"{fileName}" staat in je Downloads.</p>
+    <p style={{ marginBottom: 16 }}>Stuur dit bestand naar je collega's, bijvoorbeeld per mail. Zij kiezen Toetsen → Importeer rubric; bij wie de rubric al heeft wordt het een update.</p>
+    <div className="gap-8" style={{ justifyContent: 'flex-end' }}>
+      <button className="btn btn-primary" onClick={onClose} autoFocus>OK</button>
+    </div>
+  </>
+}
+
+// "Update gedownload" popup on its own (Toetsen → Deel updates).
+export function UpdateDownloadedDialog({ fileName, onClose }) {
+  return (
+    <div className="modal-backdrop">
+      <div className="card modal-card" style={{ maxWidth: 460 }} role="dialog" aria-modal="true">
+        <UpdateDownloadedBody fileName={fileName} onClose={onClose} />
       </div>
     </div>
   )
