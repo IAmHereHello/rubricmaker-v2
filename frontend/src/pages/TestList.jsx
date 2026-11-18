@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
 import TeacherNameDialog from '../components/TeacherNameDialog.jsx'
 import { downloadJson, readJsonFile, safeFileName } from '../utils/shareFiles.js'
+import { getUnshared, clearUnshared } from '../components/ShareUpdatePrompt.jsx'
 
 export default function TestList() {
   const [tests, setTests] = useState([])
@@ -12,6 +13,7 @@ export default function TestList() {
   const [notice, setNotice] = useState('')
   const [nameFor, setNameFor] = useState(null)   // test waiting for the teacher's name before exporting results
   const fileRef = useRef(null)
+  const [unshared, setUnshared] = useState(getUnshared)
   const navigate = useNavigate()
 
   useEffect(() => { load() }, [])
@@ -41,6 +43,8 @@ export default function TestList() {
     try {
       const file = await api.exportRubricFile(t.id)
       downloadJson(file, `${safeFileName(t.name)}.rubric`)
+      clearUnshared(t.id)
+      setUnshared(getUnshared())
       setNotice(`"${t.name}.rubric" is gedownload. Stuur het bestand naar je collega's; zij kiezen Importeer rubric. Na wijzigingen kun je opnieuw exporteren: bij collega's die de rubric al hebben wordt het een update.`)
       await load()
     } catch { setError('Exporteren mislukt.') }
@@ -133,6 +137,11 @@ export default function TestList() {
               {t.share_id && (
                 <span title="Deze rubric is gedeeld met collega's (of van een collega)" style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, background: '#e0f2fe', color: '#075985', borderRadius: 4, padding: '2px 7px', verticalAlign: 'middle' }}>
                   Gedeeld
+                </span>
+              )}
+              {t.share_id && unshared.has(t.id) && (
+                <span title="Je hebt deze rubric aangepast en de update nog niet met collega's gedeeld. Klik op Deel rubric om het updatebestand te downloaden." style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, background: '#ffedd5', color: '#9a3412', borderRadius: 4, padding: '2px 7px', verticalAlign: 'middle' }}>
+                  Gewijzigd, nog niet gedeeld
                 </span>
               )}
             </div>

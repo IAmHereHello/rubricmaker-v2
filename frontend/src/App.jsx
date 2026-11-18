@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom'
+import { createBrowserRouter, createRoutesFromElements, RouterProvider, Route, NavLink, Navigate, Outlet } from 'react-router-dom'
 import Students from './pages/Students.jsx'
 import TestList from './pages/TestList.jsx'
 import TestEdit from './pages/TestEdit.jsx'
@@ -26,7 +26,8 @@ import OpdrachtSwitch from './components/OpdrachtSwitch.jsx'
 import { BackTrailTracker } from './components/BackButton.jsx'
 import * as api from './api.js'
 
-export default function App() {
+// Data router (not <BrowserRouter>) so edit pages can intercept leaving with useBlocker.
+function Layout() {
   const [schoolYearStatus, setSchoolYearStatus] = useState(null)
   const [allStudents, setAllStudents] = useState([])
   const [wizardOpen, setWizardOpen] = useState(false)
@@ -48,7 +49,7 @@ export default function App() {
   const showButton = schoolYearStatus?.should_show
 
   return (
-    <BrowserRouter>
+    <>
       <BackTrailTracker />
       <nav>
         <NavLink to="/students" className="nav-brand">Rubricmaker</NavLink>
@@ -78,29 +79,7 @@ export default function App() {
         )}
       </nav>
 
-      <Routes>
-        <Route path="/" element={<Navigate to="/students" replace />} />
-        <Route path="/students" element={<Students />} />
-        <Route path="/students/:id/progress" element={<StudentProgress />} />
-        <Route path="/students/:id/report" element={<StudentReport />} />
-        <Route path="/students/:id/leerlingrapport" element={<Leerlingrapport />} />
-        <Route path="/tests" element={<TestList />} />
-        <Route path="/tests/import" element={<RubricImport />} />
-        <Route path="/tests/:id/edit" element={<TestEdit />} />
-        <Route path="/sessions/new" element={<SessionNew />} />
-        <Route path="/sessions/:id/grade" element={<OpdrachtSwitch normal={Grade} opdracht={OpdrachtGrade} />} />
-        <Route path="/sessions/:id/review" element={<OpdrachtSwitch normal={Review} redirect={p => `/reports/session/${p.id}?view=results`} />} />
-        <Route path="/sessions/:id/edit/:studentId" element={<OpdrachtSwitch normal={EditResult} redirect={p => `/sessions/${p.id}/grade?student=${p.studentId}&from=report`} />} />
-        <Route path="/classes/import" element={<ClassImport />} />
-        <Route path="/classes/:class_name/overview" element={<ClassOverview />} />
-        <Route path="/classes/:class_name/radar" element={<ClassRadar />} />
-        <Route path="/inhalers" element={<Inhalers />} />
-        <Route path="/sessions/:id/inhaler/:studentId" element={<OpdrachtSwitch normal={InhalerGrade} redirect={p => `/sessions/${p.id}/grade?student=${p.studentId}&from=inhalers`} />} />
-        <Route path="/reports" element={<ReportHome />} />
-        <Route path="/compare" element={<Compare />} />
-        <Route path="/compare/:shareId" element={<Compare />} />
-        <Route path="/reports/session/:id" element={<OpdrachtSwitch normal={SessionReport} opdracht={OpdrachtReport} />} />
-      </Routes>
+      <Outlet />
 
       {wizardOpen && schoolYearStatus && (
         <SchoolYearWizard
@@ -110,6 +89,36 @@ export default function App() {
           onDone={handleWizardDone}
         />
       )}
-    </BrowserRouter>
+    </>
   )
+}
+
+const router = createBrowserRouter(createRoutesFromElements(
+  <Route element={<Layout />}>
+    <Route path="/" element={<Navigate to="/students" replace />} />
+    <Route path="/students" element={<Students />} />
+    <Route path="/students/:id/progress" element={<StudentProgress />} />
+    <Route path="/students/:id/report" element={<StudentReport />} />
+    <Route path="/students/:id/leerlingrapport" element={<Leerlingrapport />} />
+    <Route path="/tests" element={<TestList />} />
+    <Route path="/tests/import" element={<RubricImport />} />
+    <Route path="/tests/:id/edit" element={<TestEdit />} />
+    <Route path="/sessions/new" element={<SessionNew />} />
+    <Route path="/sessions/:id/grade" element={<OpdrachtSwitch normal={Grade} opdracht={OpdrachtGrade} />} />
+    <Route path="/sessions/:id/review" element={<OpdrachtSwitch normal={Review} redirect={p => `/reports/session/${p.id}?view=results`} />} />
+    <Route path="/sessions/:id/edit/:studentId" element={<OpdrachtSwitch normal={EditResult} redirect={p => `/sessions/${p.id}/grade?student=${p.studentId}&from=report`} />} />
+    <Route path="/classes/import" element={<ClassImport />} />
+    <Route path="/classes/:class_name/overview" element={<ClassOverview />} />
+    <Route path="/classes/:class_name/radar" element={<ClassRadar />} />
+    <Route path="/inhalers" element={<Inhalers />} />
+    <Route path="/sessions/:id/inhaler/:studentId" element={<OpdrachtSwitch normal={InhalerGrade} redirect={p => `/sessions/${p.id}/grade?student=${p.studentId}&from=inhalers`} />} />
+    <Route path="/reports" element={<ReportHome />} />
+    <Route path="/compare" element={<Compare />} />
+    <Route path="/compare/:shareId" element={<Compare />} />
+    <Route path="/reports/session/:id" element={<OpdrachtSwitch normal={SessionReport} opdracht={OpdrachtReport} />} />
+  </Route>
+))
+
+export default function App() {
+  return <RouterProvider router={router} />
 }
