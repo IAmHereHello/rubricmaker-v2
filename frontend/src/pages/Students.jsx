@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
-import RouteBadge from '../components/RouteBadge.jsx'
+import RoutePicker from '../components/RoutePicker.jsx'
+import ClassEditDialog from '../components/ClassEditDialog.jsx'
+import ClassTransferDialog from '../components/ClassTransferDialog.jsx'
+import { readJsonFile } from '../utils/shareFiles.js'
 
 const ROUTES = ['oranje', 'geel', 'blauw']
 const EMPTY = { name: '', class_name: '', route: 'oranje' }
@@ -50,7 +53,40 @@ function findConflicts(items, existingNames) {
   }, [])
 }
 
+// ⋮ menu at the right of a class: Klas bewerken, Klas overdragen, Klas verwijderen
+function ClassMenu({ onEdit, onTransfer, onDelete }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    const onDown = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    const onKey = e => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
+  }, [open])
+  const pick = fn => e => { e.stopPropagation(); setOpen(false); fn() }
+  return (
+    <span className="kebab" ref={ref} onClick={e => e.stopPropagation()}>
+      <button type="button" className="kebab-toggle" title="Meer acties" aria-haspopup="true" aria-expanded={open}
+        onClick={() => setOpen(o => !o)}>⋮</button>
+      {open && (
+        <div className="kebab-menu" role="menu">
+          <button type="button" className="kebab-item" role="menuitem" onClick={pick(onEdit)}>Klas bewerken</button>
+          <button type="button" className="kebab-item" role="menuitem" onClick={pick(onTransfer)}>Klas overdragen</button>
+          <button type="button" className="kebab-item danger" role="menuitem" onClick={pick(onDelete)}>Klas verwijderen</button>
+        </div>
+      )}
+    </span>
+  )
+}
+
 export default function Students() {
+  const navigate = useNavigate()
+  const colleagueFileRef = useRef(null)
+  const [editClass, setEditClass] = useState(null)
+  const [transferClass, setTransferClass] = useState(null)
+  const [busyRoute, setBusyRoute] = useState(null)
   const [students, setStudents] = useState([])
   const [editing, setEditing] = useState(null)   // null | student object | 'new'
   const [form, setForm] = useState(EMPTY)
@@ -98,11 +134,23 @@ export default function Students() {
   function startNew() {
     setEditing('new'); setForm(EMPTY); setError(''); setSingleDisambig(null); setImportMode(false)
   }
-  function startEdit(s) {
-    setEditing(s)
-    setForm({ name: s.name, class_name: s.class_name, route: s.route })
-    setError(''); setSingleDisambig(null)
-    setOpenClasses(prev => { const next = new Set(prev); next.add(s.class_name); return next })
+  async function switchRoute(s, route) {
+    setBusyRoute(s.id)
+    try {
+      await api.updateStudent(s.id, { name: s.name, class_name: s.class_name, route })
+      await load()
+    } catch { setError('Kleur wijzigen mislukt.') }
+    setBusyRoute(null)
+  }
+
+  async function chooseColleagueFile(e) {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f) return
+    try {
+      const file = await readJsonFile(f)
+      navigate('/classes/import', { state: { file, fileName: f.name } })
+    } catch (err) { setImportError(err.message) }
   }
   function cancel() { setEditing(null); setError(''); setSingleDisambig(null) }
 
@@ -154,11 +202,6 @@ export default function Students() {
     } catch { setError('Opslaan mislukt.') }
   }
 
-  async function remove(id) {
-    if (!confirm('Leerling verwijderen?')) return
-    try { await api.deleteStudent(id); await load() }
-    catch { setError('Verwijderen mislukt.') }
-  }
 
   function startImport() {
     setImportMode(true); setEditing(null); setSingleDisambig(null)
@@ -299,6 +342,9 @@ export default function Students() {
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <button className="btn btn-primary" onClick={doImport}>
               Importeren ({importNames.length})
+            </button>
+            <button className="btn btn-secondary" onClick={() => colleagueFileRef.current?.click()}>
+              Importeren van collega
             </button>
             <button className="btn btn-secondary" onClick={() => { setImportMode(false); setImportError('') }}>
               Annuleren
@@ -448,6 +494,28 @@ export default function Students() {
         </div>
       )}
 
+      <input ref={colleagueFileRef} type="file" accept=".klas,application/json" style={{ display: 'none' }} onChange={chooseColleagueFile} />
+      {editClass && (
+        <ClassEditDialog
+          className={editClass}
+          students={byClass[editClass] || []}
+          allStudents={students}
+          onClose={() => setEditClass(null)}
+          onSaved={async newName => {
+            setEditClass(null)
+            setOpenClasses(prev => { const next = new Set(prev); next.add(newName); return next })
+            await load()
+          }}
+        />
+      )}
+      {transferClass && (
+        <ClassTransferDialog
+          className={transferClass}
+          onClose={() => setTransferClass(null)}
+          onDeleted={async () => { setTransferClass(null); await load() }}
+        />
+      )}
+
       {classes.length === 0 && !editing && !importMode && !importDisambig && (
         <div className="card text-muted">Nog geen leerlingen.</div>
       )}
@@ -472,10 +540,11 @@ export default function Students() {
                   className="btn btn-secondary btn-sm"
                   onClick={e => e.stopPropagation()}
                 >Klasoverzicht →</Link>
-                <button
-                  className="btn btn-danger btn-sm"
-                  onClick={e => { e.stopPropagation(); startDeleteClass(cls) }}
-                >Klas verwijderen</button>
+                <ClassMenu
+                  onEdit={() => setEditClass(cls)}
+                  onTransfer={() => setTransferClass(cls)}
+                  onDelete={() => startDeleteClass(cls)}
+                />
                 <span style={{ color: '#888', fontSize: 13, minWidth: 16, textAlign: 'center' }}>{isOpen ? '▲' : '▼'}</span>
               </div>
             </div>
@@ -519,7 +588,6 @@ export default function Students() {
                     <tr>
                       <th>Naam</th>
                       <th>Route</th>
-                      <th style={{ width: 140 }}>Acties</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -530,12 +598,12 @@ export default function Students() {
                             {s.name}
                           </Link>
                         </td>
-                        <td><RouteBadge route={s.route} /></td>
                         <td>
-                          <div className="gap-8">
-                            <button className="btn btn-secondary btn-sm" onClick={() => startEdit(s)}>Bewerken</button>
-                            <button className="btn btn-danger btn-sm" onClick={() => remove(s.id)}>Verwijder</button>
-                          </div>
+                          <RoutePicker
+                            route={s.route} studentName={s.name} busy={busyRoute === s.id}
+                            hint="Nagekeken toetsen houden hun oude kleur."
+                            onSwitch={route => switchRoute(s, route)}
+                          />
                         </td>
                       </tr>
                     ))}

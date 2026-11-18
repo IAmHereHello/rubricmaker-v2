@@ -22,7 +22,7 @@ export function readJsonFile(file) {
     const reader = new FileReader()
     reader.onload = () => {
       try { resolve(JSON.parse(reader.result)) }
-      catch { reject(new Error('Dit bestand kan niet gelezen worden. Kies een .rubric- of .resultaten-bestand.')) }
+      catch { reject(new Error('Dit bestand kan niet gelezen worden. Kies een bestand van Rubricmaker (.rubric, .resultaten of .klas).')) }
     }
     reader.onerror = () => reject(new Error('Dit bestand kan niet gelezen worden.'))
     reader.readAsText(file)

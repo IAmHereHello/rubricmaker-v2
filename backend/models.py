@@ -11,6 +11,7 @@ class Student(Base):
     name = Column(String, nullable=False)
     class_name = Column(String, nullable=False)
     route = Column(String, nullable=False)  # "oranje" | "geel" | "blauw"
+    share_key = Column(String, nullable=True, index=True)  # stable id across colleagues' copies (Klas overdragen)
 
     scores = relationship("Score", back_populates="student", cascade="all, delete-orphan")
     grades = relationship("StudentGrade", back_populates="student", cascade="all, delete-orphan")
@@ -69,6 +70,7 @@ class Session(Base):
     dismissed_inhalers = Column(JSON, default=list)   # list[int] — student IDs dismissed from retakes
     grading_mode = Column(String, default="horizontal")  # "horizontal" (per question) | "vertical" (per student)
     stack_closed = Column(Boolean, default=False)     # True once the teacher has entered the whole stack (any grading mode)
+    share_key = Column(String, nullable=True, index=True)  # stable id across colleagues' copies (Klas overdragen)
 
     test = relationship("Test", back_populates="sessions")
     scores = relationship("Score", back_populates="session", cascade="all, delete-orphan")

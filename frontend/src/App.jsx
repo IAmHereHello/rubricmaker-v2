@@ -11,6 +11,7 @@ import StudentProgress from './pages/StudentProgress.jsx'
 import StudentReport from './pages/StudentReport.jsx'
 import Leerlingrapport from './pages/Leerlingrapport.jsx'
 import ClassOverview from './pages/ClassOverview.jsx'
+import ClassImport from './pages/ClassImport.jsx'
 import ClassRadar from './pages/ClassRadar.jsx'
 import ReportHome from './pages/ReportHome.jsx'
 import SessionReport from './pages/SessionReport.jsx'
@@ -90,6 +91,7 @@ export default function App() {
         <Route path="/sessions/:id/grade" element={<OpdrachtSwitch normal={Grade} opdracht={OpdrachtGrade} />} />
         <Route path="/sessions/:id/review" element={<OpdrachtSwitch normal={Review} redirect={p => `/reports/session/${p.id}?view=results`} />} />
         <Route path="/sessions/:id/edit/:studentId" element={<OpdrachtSwitch normal={EditResult} redirect={p => `/sessions/${p.id}/grade?student=${p.studentId}&from=report`} />} />
+        <Route path="/classes/import" element={<ClassImport />} />
         <Route path="/classes/:class_name/overview" element={<ClassOverview />} />
         <Route path="/classes/:class_name/radar" element={<ClassRadar />} />
         <Route path="/inhalers" element={<Inhalers />} />
