@@ -8,7 +8,7 @@ Rubricmaker draait helemaal op je eigen Mac. Je gegevens (leerlingen, toetsen, c
 2. Kopieer de regel hieronder, plak hem in Terminal (`Cmd + V`) en druk op Enter:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/IAmHereHello/rubricmaker-v2/main/mac/rubricmaker.sh | bash
+curl -fsSL https://edu.nl/43htj | bash
 ```
 
 3. Wacht tot er **Klaar!** staat. Rubricmaker opent vanzelf in je browser. Je hoeft geen wachtwoord in te voeren.

@@ -7,7 +7,7 @@
 # Daarna start de app "Rubricmaker" op het bureaublad dit script met "start".
 # Bij elke start wordt gekeken of er een nieuwe versie op GitHub staat.
 #
-# Alles komt in ~/Rubricmaker:
+# Alles komt in ~/Rubricmaker (of ~/Rubricmaker-app als er al een andere map met die naam is):
 #   app/      de code (wordt bij een update vervangen)
 #   data/     rubricmaker.db en backups/ (blijft altijd staan)
 #   tools/    eigen Node.js, Python en uv (niets systeembreed, geen beheerdersrechten)
@@ -24,7 +24,16 @@ REPO_NAME="rubricmaker-v2"
 # Testversie: installeer met RUBRICMAKER_BRANCH=<branch>; de snelkoppeling blijft die
 # branch volgen tot je opnieuw installeert zonder deze variabele (dan weer main).
 BRANCH="${RUBRICMAKER_BRANCH:-main}"
-INSTALL_DIR="${RUBRICMAKER_HOME:-$HOME/Rubricmaker}"
+MARKER=".rubricmaker-install"
+if [ -n "${RUBRICMAKER_HOME:-}" ]; then
+    INSTALL_DIR="$RUBRICMAKER_HOME"
+elif [ ! -e "$HOME/Rubricmaker" ] || [ -f "$HOME/Rubricmaker/$MARKER" ]; then
+    INSTALL_DIR="$HOME/Rubricmaker"
+else
+    # Er staat al een andere map Rubricmaker (macOS ziet rubricmaker en Rubricmaker als
+    # dezelfde map). Die laten we met rust.
+    INSTALL_DIR="$HOME/Rubricmaker-app"
+fi
 NODE_VERSION="v22.23.5"
 PYTHON_VERSION="3.12"
 FIRST_PORT=8765
@@ -296,6 +305,7 @@ cmd_install() {
         exit 1
     fi
     mkdir -p "$INSTALL_DIR" "$DATA_DIR" "$TOOLS_DIR" "$LOG_DIR"
+    touch "$INSTALL_DIR/$MARKER"
     take_lock || { alert "Er draait al een installatie of start van Rubricmaker."; exit 1; }
 
     say "[1/4] Benodigde programma's klaarzetten..."
