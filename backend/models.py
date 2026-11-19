@@ -31,6 +31,7 @@ class Test(Base):
     grading_method = Column(String, nullable=True)   # "points" | "goals" | "cijfer" | null
     grade_config = Column(JSON, nullable=True)        # points/goals: {oranje:{beheerst:N,expert:N},...}; cijfer: {cijfer:{multiplier:9,offset:1}}
     share_id = Column(String, nullable=True, index=True)  # "family id": copies of the same rubric on colleagues' computers share it
+    levels = Column(JSON, nullable=True)  # leerjaar groups, e.g. ["2mhv", "3h"]; null = never set (auto-fill offered), [] = none
 
     questions = relationship(
         "Question", back_populates="test", cascade="all, delete-orphan",
@@ -250,3 +251,13 @@ class ComparisonImport(Base):
     exported_at = Column(String, nullable=True)
     imported_at = Column(DateTime, server_default=func.now())
     data = Column(JSON, nullable=False)
+
+
+class ClassLevel(Base):
+    """Leerjaar (1-6) and niveaus ("m", "h", "v", any combination) of a class. Classes are just
+    names on students, so this is keyed by class name. Group label = leerjaar + niveaus, e.g. "2mhv"."""
+    __tablename__ = "class_levels"
+
+    class_name = Column(String, primary_key=True)
+    leerjaar = Column(Integer, nullable=False)
+    niveaus = Column(String, nullable=False, default="")

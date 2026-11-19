@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session as DBSession
 
 from . import opdracht_logic
+from .class_levels import clean_labels
 from .models import (
     AppSetting, ComparisonImport, OpdrachtGroup, OpdrachtGroupScore, OpdrachtScore,
     Question, Score, Session as SessionModel, Student, StudentGrade, Test,
@@ -133,6 +134,7 @@ def rubric_dict(test: Test):
         "name": test.name,
         "grading_method": test.grading_method,
         "grade_config": copy.deepcopy(test.grade_config),
+        "levels": clean_labels(test.levels),
         "questions": [_question_dict(q) for q in sorted(test.questions, key=lambda q: (q.order, q.id))],
     }
 
@@ -190,6 +192,7 @@ def validate_rubric(rubric):
         q["routes"] = [r for r in (q.get("routes") or []) if r in ROUTES]
     if rubric.get("grade_config") is not None and not isinstance(rubric["grade_config"], dict):
         raise SharingError("Het rubricbestand bevat een ongeldige normering.")
+    rubric["levels"] = clean_labels(rubric.get("levels"))
     return rubric
 
 
@@ -226,6 +229,7 @@ def import_new(db: DBSession, rubric):
         grading_method=rubric.get("grading_method"),
         grade_config=copy.deepcopy(rubric.get("grade_config")),
         share_id=rubric["share_id"],
+        levels=rubric.get("levels") or None,
     )
     db.add(test)
     db.flush()

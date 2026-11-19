@@ -6,7 +6,7 @@ from ..database import get_db
 from ..models import Student
 from ..route_history import change_student_route
 from ..schemas import StudentCreate, StudentUpdate, StudentOut, StudentImport
-from .. import opdracht_logic
+from .. import opdracht_logic, class_levels
 
 router = APIRouter(prefix="/students", tags=["students"])
 
@@ -47,6 +47,7 @@ def delete_class(class_name: str, db: Session = Depends(get_db)):
     count = len(students)
     for s in students:
         db.delete(s)
+    class_levels.delete(db, class_name)
     db.commit()
     return {"deleted": count}
 

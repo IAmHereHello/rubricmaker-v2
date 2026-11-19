@@ -786,6 +786,30 @@ tr:hover td { background: #fafbfd; }
 .test-card:hover { border-color: #c9d0dc; box-shadow: 0 2px 10px rgba(30, 58, 95, .08); }
 .test-card .gap-8 { cursor: default; }
 .test-tag { margin-left: 8px; font-size: 11px; font-weight: 700; border-radius: 4px; padding: 2px 7px; vertical-align: middle; cursor: default; }
+.level-tag { background: #eef2f7; color: #1e3a5f; }
+.level-tag-missing { background: #fff; color: #8a6d00; border: 1px dashed #d4b44a; cursor: pointer; font-family: inherit; }
+.level-tag-missing:hover { background: #fffbea; }
+
+/* ── Toetsen per leerjaar ────────────────────────────────────────────────── */
+.level-filter { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.level-filter button {
+  border: 1px solid #c9d0dc; background: #fff; color: #1e3a5f; border-radius: 16px;
+  padding: 4px 14px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.level-filter button:hover { background: #f5f7fa; }
+.level-filter button.active { background: #1e3a5f; border-color: #1e3a5f; color: #fff; }
+.level-group { margin-bottom: 18px; }
+.level-group-head {
+  display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: none;
+  padding: 4px 2px 8px; font-size: 15px; font-weight: 700; color: #1e3a5f; cursor: pointer; text-align: left; font-family: inherit;
+}
+.level-group-head .count { color: #888; font-weight: 400; font-size: 13px; }
+.level-group-head .chev { color: #888; font-size: 12px; width: 14px; }
+.level-group-none .level-group-head { color: #8a6d00; }
+.level-banner { background: #fffbea; border: 1px solid #ecd98a; color: #6b5400; border-radius: 6px; padding: 12px 14px; margin-bottom: 14px; font-size: 14px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.rubric-levels { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.rubric-levels .chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid #c9d0dc; border-radius: 16px; padding: 3px 10px; font-size: 13px; cursor: pointer; background: #fff; margin: 0; font-weight: 600; color: #1e3a5f; }
+.rubric-levels .chip.on { background: #e8eef7; border-color: #1e3a5f; }
 
 /* ── Klas importeren van collega ─────────────────────────────────────────── */
 .ci-item {

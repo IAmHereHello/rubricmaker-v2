@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import * as api from '../api.js'
+import RubricLevels from '../components/RubricLevels.jsx'
 import BackButton from '../components/BackButton.jsx'
 import { PYRAMID_LEVELS, pyramidLabel, DOMAINS } from '../constants.js'
 import { getCijferConfig } from '../utils/gradingLogic.js'
@@ -248,6 +249,8 @@ export default function TestEdit() {
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
+
+      <RubricLevels test={test} onChange={levels => setTest(t => ({ ...t, levels }))} />
 
       {/* Question form */}
       {editingQ && (

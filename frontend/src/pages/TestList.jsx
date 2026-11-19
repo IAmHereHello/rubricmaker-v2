@@ -1,9 +1,21 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
 import TeacherNameDialog from '../components/TeacherNameDialog.jsx'
 import { downloadJson, readJsonFile, safeFileName } from '../utils/shareFiles.js'
 import { getUnshared, clearUnshared, UpdateDownloadedDialog } from '../components/ShareUpdatePrompt.jsx'
+import { parseLabel, sortLabels } from '../utils/levels.js'
+
+const NONE = '__none__'
+const FILTER_KEY = 'toetsen.levelFilter'
+const CLOSED_KEY = 'toetsen.closedGroups'
+
+function readStore(key, fallback) {
+  try { const v = localStorage.getItem(key); return v == null ? fallback : JSON.parse(v) } catch { return fallback }
+}
+function writeStore(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* private window: not remembered */ }
+}
 
 // ⋮ menu at the right of a toets: Bewerken, Deel rubric, Exporteer resultaten, Verwijder
 function TestMenu({ onEdit, onShare, onExport, onDelete }) {
@@ -44,6 +56,9 @@ export default function TestList() {
   const fileRef = useRef(null)
   const [unshared, setUnshared] = useState(getUnshared)
   const [downloaded, setDownloaded] = useState(null)   // file name for the "Update gedownload" popup
+  const [filter, setFilter] = useState(() => readStore(FILTER_KEY, 'all'))          // 'all' | leerjaar number
+  const [closed, setClosed] = useState(() => new Set(readStore(CLOSED_KEY, [])))   // collapsed group labels
+  const [suggest, setSuggest] = useState(null)   // auto-fill offer for rubrics without leerjaar
   const navigate = useNavigate()
 
   useEffect(() => { load() }, [])
@@ -51,6 +66,30 @@ export default function TestList() {
   async function load() {
     try { setTests(await api.getTests()) }
     catch { setError('Fout bij laden van toetsen.') }
+    try { setSuggest(await api.getLevelSuggestions()) } catch { setSuggest(null) }
+  }
+
+  async function fillLevels() {
+    setError(''); setNotice('')
+    try {
+      const { filled } = await api.fillLevelSuggestions()
+      setNotice(`Leerjaar ingevuld bij ${filled} rubric${filled === 1 ? '' : 's'}. Je kunt het per rubric aanpassen via Bewerken.`)
+      await load()
+    } catch { setError('Automatisch invullen mislukt.') }
+  }
+
+  function chooseFilter(value) {
+    setFilter(value)
+    writeStore(FILTER_KEY, value)
+  }
+
+  function toggleGroup(key) {
+    setClosed(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      writeStore(CLOSED_KEY, [...next])
+      return next
+    })
   }
 
   async function create() {
@@ -126,6 +165,58 @@ export default function TestList() {
     } catch (err) { setError(err.message) }
   }
 
+  function renderCard(t, groupKey) {
+    const edited = !!t.share_id && unshared.has(t.id)
+    return (
+      <div key={`${groupKey}-${t.id}`} className="card test-card" onClick={() => navigate(`/tests/${t.id}/edit`)}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>
+            {t.name}
+            {t.grading_method === 'opdracht' && (
+              <span className="test-tag" style={{ background: '#ede9fe', color: '#5b21b6' }}>Grote opdracht</span>
+            )}
+            {t.share_id && !edited && (
+              <span className="test-tag" title="Deze rubric is gedeeld met collega's (of van een collega)" style={{ background: '#e0f2fe', color: '#075985' }}
+                onClick={e => e.stopPropagation()}>Gedeeld</span>
+            )}
+            {edited && (
+              <span className="test-tag" title="Je hebt deze gedeelde rubric bewerkt en de update nog niet met collega's gedeeld." style={{ background: '#fee2e2', color: '#b91c1c' }}
+                onClick={e => e.stopPropagation()}>Gedeeld, bewerkt</span>
+            )}
+          </div>
+          <div className="text-muted" style={{ marginTop: 2 }}>
+            Aangemaakt op {new Date(t.created_at).toLocaleDateString('nl-NL')}
+          </div>
+        </div>
+        <div className="gap-8" onClick={e => e.stopPropagation()}>
+          {edited && (
+            <button className="btn btn-primary btn-sm" onClick={() => shareUpdates(t)} title="Download het updatebestand voor je collega's">Deel updates</button>
+          )}
+          <TestMenu
+            onEdit={() => navigate(`/tests/${t.id}/edit`)}
+            onShare={() => shareRubric(t)}
+            onExport={() => exportResults(t)}
+            onDelete={() => remove(t.id)}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  // Leerjaar groups: a rubric with two groups shows in both; "Geen leerjaar" first.
+  const allLabels = sortLabels(tests.flatMap(t => t.levels || []))
+  const years = [...new Set(allLabels.map(l => parseLabel(l)?.leerjaar).filter(Boolean))]
+  const activeFilter = filter !== 'all' && !years.includes(filter) ? 'all' : filter
+  const groups = []
+  const noLevel = tests.filter(t => !(t.levels || []).length)
+  if (noLevel.length && activeFilter === 'all') groups.push({ key: NONE, title: 'Geen leerjaar', tests: noLevel })
+  for (const label of allLabels) {
+    if (activeFilter !== 'all' && parseLabel(label)?.leerjaar !== activeFilter) continue
+    groups.push({ key: label, title: label, tests: tests.filter(t => (t.levels || []).includes(label)) })
+  }
+  const suggestCount = suggest ? Object.keys(suggest.suggestions || {}).length : 0
+  const missingClasses = suggest?.classes_without_level || []
+
   return (
     <div className="page">
       <div className="page-header">
@@ -167,40 +258,34 @@ export default function TestList() {
         <div className="card text-muted">Nog geen toetsen.</div>
       )}
 
-      {tests.map(t => {
-        const edited = !!t.share_id && unshared.has(t.id)
+      {(suggestCount > 0 || (missingClasses.length > 0 && noLevel.length > 0)) && (
+        <div className="level-banner">
+          <div style={{ flex: 1, minWidth: 240 }}>
+            {suggestCount > 0 && <>{suggestCount} rubric{suggestCount === 1 ? '' : 's'} zonder leerjaar {suggestCount === 1 ? 'kan' : 'kunnen'} automatisch worden ingevuld op basis van de klassen waarin {suggestCount === 1 ? 'hij is' : 'ze zijn'} nagekeken. </>}
+            {missingClasses.length > 0 && <>Klas {missingClasses.join(', ')} {missingClasses.length === 1 ? 'heeft' : 'hebben'} nog geen leerjaar; stel dat eerst in bij <Link to="/students">Leerlingen</Link> → Klas bewerken.</>}
+          </div>
+          {suggestCount > 0 && <button className="btn btn-primary btn-sm" onClick={fillLevels}>Automatisch invullen</button>}
+        </div>
+      )}
+
+      {years.length > 0 && (
+        <div className="level-filter" role="group" aria-label="Filter op leerjaar">
+          <button type="button" className={activeFilter === 'all' ? 'active' : ''} onClick={() => chooseFilter('all')}>Alle</button>
+          {years.map(y => (
+            <button type="button" key={y} className={activeFilter === y ? 'active' : ''} onClick={() => chooseFilter(y)}>Leerjaar {y}</button>
+          ))}
+        </div>
+      )}
+
+      {groups.map(g => {
+        const open = !closed.has(g.key)
         return (
-          <div key={t.id} className="card test-card" onClick={() => navigate(`/tests/${t.id}/edit`)}>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 15 }}>
-                {t.name}
-                {t.grading_method === 'opdracht' && (
-                  <span className="test-tag" style={{ background: '#ede9fe', color: '#5b21b6' }}>Grote opdracht</span>
-                )}
-                {t.share_id && !edited && (
-                  <span className="test-tag" title="Deze rubric is gedeeld met collega's (of van een collega)" style={{ background: '#e0f2fe', color: '#075985' }}
-                    onClick={e => e.stopPropagation()}>Gedeeld</span>
-                )}
-                {edited && (
-                  <span className="test-tag" title="Je hebt deze gedeelde rubric bewerkt en de update nog niet met collega's gedeeld." style={{ background: '#fee2e2', color: '#b91c1c' }}
-                    onClick={e => e.stopPropagation()}>Gedeeld, bewerkt</span>
-                )}
-              </div>
-              <div className="text-muted" style={{ marginTop: 2 }}>
-                Aangemaakt op {new Date(t.created_at).toLocaleDateString('nl-NL')}
-              </div>
-            </div>
-            <div className="gap-8" onClick={e => e.stopPropagation()}>
-              {edited && (
-                <button className="btn btn-primary btn-sm" onClick={() => shareUpdates(t)} title="Download het updatebestand voor je collega's">Deel updates</button>
-              )}
-              <TestMenu
-                onEdit={() => navigate(`/tests/${t.id}/edit`)}
-                onShare={() => shareRubric(t)}
-                onExport={() => exportResults(t)}
-                onDelete={() => remove(t.id)}
-              />
-            </div>
+          <div key={g.key} className={`level-group${g.key === NONE ? ' level-group-none' : ''}`}>
+            <button type="button" className="level-group-head" aria-expanded={open} onClick={() => toggleGroup(g.key)}>
+              <span className="chev">{open ? '▼' : '▶'}</span>
+              {g.title} <span className="count">({g.tests.length})</span>
+            </button>
+            {open && g.tests.map(t => renderCard(t, g.key))}
           </div>
         )
       })}

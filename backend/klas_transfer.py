@@ -25,7 +25,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session as DBSession
 
-from . import opdracht_logic
+from . import opdracht_logic, class_levels
 from .models import (
     OpdrachtEntry, OpdrachtGroup, OpdrachtGroupScore, OpdrachtScore, OpdrachtSessionState,
     Question, Score, Session as SessionModel, SessionStudentRoute, Student, StudentGrade,
@@ -157,6 +157,7 @@ def class_file(db: DBSession, class_name, session_ids=None):
         "teacher_name": teacher_name(db),
         "installation_id": installation_id(db),
         "class_name": class_name,
+        "class_level": class_levels.level_dict(class_levels.get_level(db, class_name)),
         "students": students_out,
         "tests": list(tests_out.values()),
         "sessions": sessions_out,
@@ -359,7 +360,8 @@ def resolve_test(db: DBSession, rubric, inst, teacher):
 def _create_test(db, rubric, info, inst):
     share_id = rubric["share_id"] if info["action"] == "new" else _copy_id(rubric)
     test = Test(name=info["name"], grading_method=rubric.get("grading_method"),
-                grade_config=copy.deepcopy(rubric.get("grade_config")), share_id=share_id)
+                grade_config=copy.deepcopy(rubric.get("grade_config")), share_id=share_id,
+                levels=rubric.get("levels") or None)
     db.add(test)
     db.flush()
     for i, rq in enumerate(rubric["questions"]):
@@ -775,6 +777,11 @@ def apply(db: DBSession, plan: Plan):
         else:
             _update_session(db, plan, se, local, test, smap, counts)
 
+    # Leerjaar + niveaus of the class: taken from the file only when this class has none yet
+    lvl = data.get("class_level")
+    if isinstance(lvl, dict) and class_levels.get_level(db, plan.target) is None:
+        class_levels.set_level(db, plan.target, lvl.get("leerjaar"), lvl.get("niveaus"))
+
     db.flush()
     # 3. Grote opdracht results are derived from the levels
     for local, info in opdracht_sessions:
@@ -1094,6 +1101,7 @@ def rename_class(db: DBSession, old, new):
         s.class_name = new
     for se in db.query(SessionModel).filter(SessionModel.class_name == old):
         se.class_name = new
+    class_levels.rename(db, old, new)
     db.commit()
     return new
 
@@ -1106,5 +1114,6 @@ def delete_class_everything(db: DBSession, class_name):
     for s in db.query(Student).filter(Student.class_name == class_name).all():
         db.delete(s)
         count += 1
+    class_levels.delete(db, class_name)
     db.commit()
     return count
