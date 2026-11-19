@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -18,6 +18,15 @@ class FileBody(BaseModel):
 class UpdateBody(BaseModel):
     file: dict
     accept: Optional[dict] = None
+
+
+class ExportItem(BaseModel):
+    test_id: int
+    labels: List[str]
+
+
+class ExportBody(BaseModel):
+    items: List[ExportItem]
 
 
 class SettingsBody(BaseModel):
@@ -119,6 +128,22 @@ def apply_update(body: UpdateBody, db: DBSession = Depends(get_db)):
 @router.get("/tests/{test_id}/results")
 def export_results(test_id: int, db: DBSession = Depends(get_db)):
     return sharing.results_file(db, _test(db, test_id))
+
+
+@router.get("/results/options")
+def export_options(db: DBSession = Depends(get_db)):
+    return sharing.export_options(db)
+
+
+@router.post("/results/export")
+def export_selected(body: ExportBody, db: DBSession = Depends(get_db)):
+    selection = []
+    for item in body.items:
+        if item.labels:
+            selection.append((_test(db, item.test_id), set(item.labels)))
+    if not selection:
+        raise HTTPException(400, "Kies minstens één toets.")
+    return sharing.results_bundle(db, selection)
 
 
 @router.post("/compare/import")

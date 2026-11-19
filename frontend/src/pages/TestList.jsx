@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
-import TeacherNameDialog from '../components/TeacherNameDialog.jsx'
+import ResultsExportDialog from '../components/ResultsExportDialog.jsx'
 import { downloadJson, readJsonFile, safeFileName } from '../utils/shareFiles.js'
 import { getUnshared, clearUnshared, UpdateDownloadedDialog } from '../components/ShareUpdatePrompt.jsx'
 
@@ -40,7 +40,7 @@ export default function TestList() {
   const [kind, setKind] = useState('toets')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const [nameFor, setNameFor] = useState(null)   // test waiting for the teacher's name before exporting results
+  const [exportFor, setExportFor] = useState(null)   // test id whose results export dialog is open
   const fileRef = useRef(null)
   const [unshared, setUnshared] = useState(getUnshared)
   const [downloaded, setDownloaded] = useState(null)   // file name for the "Update gedownload" popup
@@ -92,30 +92,6 @@ export default function TestList() {
     } catch { setError('Exporteren mislukt.') }
   }
 
-  async function exportResults(t, nameKnown = false) {
-    setError(''); setNotice('')
-    try {
-      if (!nameKnown) {
-        const { teacher_name } = await api.getShareSettings()
-        if (!teacher_name) { setNameFor(t); return }
-      }
-      const file = await api.exportResultsFile(t.id)
-      const graded = file.classes.reduce((n, c) => n + c.graded, 0)
-      const total = file.classes.reduce((n, c) => n + c.total, 0)
-      if (!file.classes.length) { setError(`"${t.name}" is nog niet nagekeken in een klas.`); return }
-      downloadJson(file, `${safeFileName(t.name)} - resultaten.resultaten`)
-      setNotice(`Resultaten gedownload: ${graded} van ${total} leerlingen nagekeken (zonder namen). Alleen volledig nagekeken leerlingen zitten in het bestand.`)
-      await load()
-    } catch { setError('Exporteren mislukt.') }
-  }
-
-  async function saveName(name) {
-    const t = nameFor
-    setNameFor(null)
-    try { await api.saveShareSettings(name) } catch { setError('Opslaan van je naam mislukt.'); return }
-    exportResults(t, true)
-  }
-
   async function chooseImport(e) {
     const f = e.target.files?.[0]
     e.target.value = ''
@@ -139,7 +115,10 @@ export default function TestList() {
       {error && <div className="alert alert-error">{error}</div>}
       {notice && <div className="alert alert-success">{notice}</div>}
       {downloaded && <UpdateDownloadedDialog fileName={downloaded} onClose={() => setDownloaded(null)} />}
-      {nameFor && <TeacherNameDialog onSave={saveName} onCancel={() => setNameFor(null)} />}
+      {exportFor !== null && (
+        <ResultsExportDialog testId={exportFor} onClose={() => setExportFor(null)}
+          onDone={msg => { setExportFor(null); setError(''); setNotice(msg); load() }} />
+      )}
 
       <div className="card">
         <div className="form-row">
@@ -197,7 +176,7 @@ export default function TestList() {
               <TestMenu
                 onEdit={() => navigate(`/tests/${t.id}/edit`)}
                 onShare={() => shareRubric(t)}
-                onExport={() => exportResults(t)}
+                onExport={() => setExportFor(t.id)}
                 onDelete={() => remove(t.id)}
               />
             </div>

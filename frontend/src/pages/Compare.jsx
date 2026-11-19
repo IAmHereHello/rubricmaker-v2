@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid,
+  BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, Cell, ReferenceLine,
 } from 'recharts'
 import * as api from '../api.js'
 import MathText from '../components/MathText.jsx'
 import TeacherNameDialog from '../components/TeacherNameDialog.jsx'
+import ResultsExportDialog from '../components/ResultsExportDialog.jsx'
 import { pyramidLabel } from '../constants.js'
 import { exportPDF } from '../utils/exportPDF.js'
 import { readJsonFile, safeFileName } from '../utils/shareFiles.js'
@@ -183,6 +184,105 @@ function Warnings({ items, extra, noun }) {
   )
 }
 
+const HIST_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']
+
+function OtherNormeringTag() {
+  return (
+    <span title="Deze docent gebruikt een andere normering; de resultaten zijn daarom niet één op één te vergelijken" style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, background: '#fdf0ef', color: '#c0392b', borderRadius: 4, padding: '1px 6px', whiteSpace: 'nowrap' }}>
+      andere normering
+    </span>
+  )
+}
+
+function CategoryBar({ counts }) {
+  const total = Object.values(counts).reduce((a, b) => a + b, 0)
+  if (!total) return null
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div style={{ display: 'flex', height: 16, borderRadius: 4, overflow: 'hidden', marginBottom: 4 }}>
+        {Object.keys(CATEGORY_LABELS).map(k => counts[k] > 0 && (
+          <div key={k} style={{ width: `${counts[k] / total * 100}%`, background: CATEGORY_COLORS[k] }} />
+        ))}
+      </div>
+      {Object.entries(CATEGORY_LABELS).map(([k, label]) => (
+        <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+          <span style={{ display: 'inline-block', width: 10, height: 10, background: CATEGORY_COLORS[k], borderRadius: 2 }} />
+          <span style={{ flex: 1 }}>{label}</span>
+          <strong>{counts[k] || 0}</strong>
+          <span className="text-muted" style={{ width: 38, textAlign: 'right' }}>{Math.round((counts[k] || 0) / total * 100)}%</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function CijferHistogram({ cijfer, maxPct }) {
+  const hist = cijfer.hist || {}
+  const data = HIST_KEYS.map(k => ({
+    x: Number(k), n: hist[k] || 0, pct: cijfer.count ? Math.round((hist[k] || 0) / cijfer.count * 100) : 0,
+  }))
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div style={{ fontSize: 13, marginBottom: 2 }}>
+        Gemiddeld <strong>{Number(cijfer.avg).toFixed(1).replace('.', ',')}</strong> · {cijfer.voldoende_pct}% voldoende
+      </div>
+      <ResponsiveContainer width="100%" height={130}>
+        <BarChart data={data} margin={{ top: 14, right: 6, left: -22, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+          <XAxis type="number" dataKey="x" domain={[0.5, 10.5]} ticks={data.map(d => d.x)} tick={{ fontSize: 11 }} interval={0} />
+          <YAxis domain={[0, maxPct]} unit="%" tick={{ fontSize: 10 }} allowDecimals={false} />
+          <Tooltip formatter={(v, _n, item) => [`${item.payload.n} lln (${v}%)`, `cijfer ${item.payload.x}`]} labelFormatter={() => ''} />
+          <ReferenceLine x={5.5} stroke="#555" strokeDasharray="4 3" label={{ value: '5,5', position: 'top', fontSize: 10, fill: '#555' }} />
+          <Bar dataKey="pct" isAnimationActive={false} barSize={14}>
+            {data.map(d => <Cell key={d.x} fill={d.x >= 6 ? '#66bb6a' : '#e57373'} />)}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+function ClassBlocks({ rows, route }) {
+  const classRows = rows.filter(r => !r.is_total)
+  if (!classRows.length) return null
+  const pcts = classRows.flatMap(r => {
+    const c = r.distribution?.cijfer
+    return c && c.count ? HIST_KEYS.map(k => ((c.hist || {})[k] || 0) / c.count * 100) : []
+  })
+  const maxPct = Math.max(20, Math.ceil(Math.max(0, ...pcts) / 10) * 10)
+  const hasCijfer = pcts.length > 0
+  return (
+    <div className="card">
+      <h3 style={{ fontSize: 15, marginBottom: 8 }}>Per klas</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
+        {classRows.map((r, i) => {
+          const d = r.distribution || {}
+          return (
+            <div key={i} style={{ border: '1px solid #e2e6ee', borderRadius: 8, padding: 10, breakInside: 'avoid' }}>
+              <div style={{ fontWeight: 700, fontSize: 16 }}>{r.label}</div>
+              <div className="text-muted" style={{ fontSize: 13 }}>
+                {r.teacher_name}{r.own ? ' (jij)' : ''}
+                {r.other_normering && <OtherNormeringTag />}
+              </div>
+              <div style={{ fontSize: 13, marginTop: 4 }}>
+                {r.graded} van {r.total} nagekeken{route ? ` · ${r.n} op route ${route}` : ''}
+              </div>
+              {!r.n && <div className="text-muted" style={{ fontSize: 13, marginTop: 6 }}>Geen leerlingen{route ? ' op deze route' : ''}.</div>}
+              {d.categories && <CategoryBar counts={d.categories} />}
+              {d.cijfer && <CijferHistogram cijfer={d.cijfer} maxPct={maxPct} />}
+            </div>
+          )
+        })}
+      </div>
+      {hasCijfer && (
+        <p className="text-muted" style={{ marginTop: 8, fontSize: 12 }}>
+          Histogram: % van de nagekeken leerlingen per heel cijfer (6,4 telt bij 6). De stippellijn is de voldoende-grens 5,5. Alle klassen hebben dezelfde schaal.
+        </p>
+      )}
+    </div>
+  )
+}
+
 function CompareDetail({ shareId }) {
   const [route, setRoute] = useState('')
   const [data, setData] = useState(null)
@@ -258,6 +358,8 @@ function CompareDetail({ shareId }) {
           {data.name}{route ? ` · route ${route}` : ''}
         </h2>
 
+        <ClassBlocks rows={rows} route={route} />
+
         <Warnings items={items} extra={data.extra_questions} noun={isOpdracht ? { one: 'onderdeel', many: 'onderdelen' } : { one: 'vraag', many: 'vragen' }} />
 
         <div className="card" style={{ overflowX: 'auto' }}>
@@ -281,11 +383,7 @@ function CompareDetail({ shareId }) {
                   <PctCell value={r.total_pct} />
                   <td>
                     {distText(r.distribution)}
-                    {r.other_normering && (
-                      <span title="Deze docent gebruikt een andere normering; de resultaten zijn daarom niet één op één te vergelijken" style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, background: '#fdf0ef', color: '#c0392b', borderRadius: 4, padding: '1px 6px' }}>
-                        andere normering
-                      </span>
-                    )}
+                    {r.other_normering && <OtherNormeringTag />}
                   </td>
                 </tr>
               ))}
@@ -356,6 +454,7 @@ function CompareHome() {
   const [editName, setEditName] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [exporting, setExporting] = useState(false)
   const fileRef = useRef(null)
 
   function load() {
@@ -372,8 +471,11 @@ function CompareHome() {
     for (const f of files) {
       try {
         const data = await readJsonFile(f)
-        const r = await api.importResultsFile(data)
-        done.push(`${r.teacher_name} (${r.test_name})${r.replaced ? ', oude versie vervangen' : ''}`)
+        const { imports } = await api.importResultsFile(data)
+        imports.forEach(r => {
+          const klassen = r.classes.length ? `, ${r.classes.join(', ')}` : ''
+          done.push(`${r.teacher_name} (${r.test_name}${klassen})${r.replaced ? ', aangevuld' : ''}`)
+        })
       } catch (err) {
         failed.push(`${f.name}: ${api.errorText(err, err.message || 'importeren mislukt')}`)
       }
@@ -394,17 +496,22 @@ function CompareHome() {
         <h1>Vergelijken</h1>
         <div className="gap-8">
           <input ref={fileRef} type="file" multiple accept=".resultaten,application/json" style={{ display: 'none' }} onChange={chooseFiles} />
+          <button className="btn btn-secondary" onClick={() => setExporting(true)}>Exporteer resultaten</button>
           <button className="btn btn-primary" onClick={() => fileRef.current?.click()}>Importeer resultaten</button>
         </div>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
       {notice && <div className="alert alert-success">{notice}</div>}
+      {exporting && (
+        <ResultsExportDialog onClose={() => setExporting(false)}
+          onDone={msg => { setExporting(false); setError(''); setNotice(msg); load() }} />
+      )}
       {editName && <TeacherNameDialog initial={settings?.teacher_name || ''} onSave={saveName} onCancel={() => setEditName(false)} />}
 
       <div className="card text-muted" style={{ fontSize: 13 }}>
-        Collega's maken bij Toetsen een resultatenbestand met <strong>Exporteer resultaten</strong> (zonder leerlingnamen) en sturen het naar jou.
-        Importeer hier hun bestanden; je eigen resultaten komen er automatisch bij. Een nieuw bestand van dezelfde collega vervangt het oude.
+        Met <strong>Exporteer resultaten</strong> maak je een bestand (zonder leerlingnamen) met één of meer toetsen, per klas gekozen, om naar collega's te sturen.
+        Importeer hier hun bestanden; je eigen resultaten komen er automatisch bij. Een nieuw bestand van dezelfde collega vervangt alleen de klassen die erin zitten; andere klassen blijven staan.
         <div style={{ marginTop: 8 }}>
           Jouw naam in resultatenbestanden: <strong>{settings?.teacher_name || '(nog niet ingesteld)'}</strong>{' '}
           <button className="btn btn-secondary btn-sm" onClick={() => setEditName(true)}>Wijzigen</button>
