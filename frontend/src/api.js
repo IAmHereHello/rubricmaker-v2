@@ -165,6 +165,12 @@ export const exportRubricFile = (test_id) =>
 export const exportResultsFile = (test_id) =>
   http.get(`/sharing/tests/${test_id}/results`).then(r => r.data)
 
+export const getResultsExportOptions = () =>
+  http.get('/sharing/results/options').then(r => r.data)
+
+export const exportSelectedResults = (items) =>
+  http.post('/sharing/results/export', { items }).then(r => r.data)
+
 export const inspectRubricFile = (file) =>
   http.post('/sharing/rubric/inspect', { file }).then(r => r.data)
 

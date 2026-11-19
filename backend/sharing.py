@@ -33,6 +33,9 @@ from .route_history import effective_routes
 RUBRIC_FORMAT = "rubricmaker-rubric"
 RESULTS_FORMAT = "rubricmaker-resultaten"
 FILE_VERSION = 1
+# A results file with several toetsen ("tests" list). Older apps refuse it with the
+# "nieuwere versie" message instead of misreading it; single-toets files stay version 1.
+RESULTS_BUNDLE_VERSION = 2
 
 ROUTES = ["oranje", "geel", "blauw"]
 PYRAMID = ["reproductie", "verbinding", "reflectie"]
@@ -149,7 +152,7 @@ def rubric_file(db: DBSession, test: Test):
     }
 
 
-def _check_format(data, expected):
+def _check_format(data, expected, max_version=FILE_VERSION):
     if not isinstance(data, dict):
         raise SharingError("Dit bestand kan niet gelezen worden.")
     fmt = data.get("format")
@@ -163,7 +166,7 @@ def _check_format(data, expected):
         version = int(data.get("version") or 0)
     except (TypeError, ValueError):
         version = 0
-    if version > FILE_VERSION:
+    if version > max_version:
         raise SharingError(
             "Dit bestand is gemaakt met een nieuwere versie van Rubricmaker. "
             "Start de app opnieuw om bij te werken en probeer het dan nog eens."
@@ -776,13 +779,17 @@ def _class_labels(sessions):
     return labels
 
 
-def results_data(db: DBSession, test: Test, shuffle=True):
-    """Anonymous results of fully graded students, per klas (session)."""
+def results_data(db: DBSession, test: Test, shuffle=True, labels_wanted=None):
+    """Anonymous results of fully graded students, per klas (session).
+
+    labels_wanted: only these klas labels (None = all)."""
     sessions = db.query(SessionModel).filter(SessionModel.test_id == test.id).order_by(SessionModel.created_at, SessionModel.id).all()
     labels = _class_labels(sessions)
     questions = sorted(test.questions, key=lambda q: (q.order, q.id))
     classes = []
     for session in sessions:
+        if labels_wanted is not None and labels[session.id] not in labels_wanted:
+            continue
         rows = []
         if is_opdracht(test.grading_method):
             ctx = opdracht_logic.Context(db, session)
@@ -850,42 +857,99 @@ def results_data(db: DBSession, test: Test, shuffle=True):
     return classes
 
 
-def results_file(db: DBSession, test: Test):
-    ensure_share_ids(db, test)
+def _results_header(db: DBSession):
     return {
         "format": RESULTS_FORMAT,
-        "version": FILE_VERSION,
         "exported_at": _now(),
         "teacher": {"name": teacher_name(db), "installation_id": installation_id(db)},
-        "rubric": rubric_dict(test),
-        "classes": results_data(db, test),
     }
 
 
-def import_results(db: DBSession, data):
-    _check_format(data, RESULTS_FORMAT)
-    rubric = validate_rubric(copy.deepcopy(data.get("rubric")))
-    teacher = data.get("teacher") or {}
-    inst = teacher.get("installation_id")
-    if not inst or not isinstance(data.get("classes"), list):
+def results_file(db: DBSession, test: Test, labels_wanted=None):
+    ensure_share_ids(db, test)
+    return {
+        **_results_header(db),
+        "version": FILE_VERSION,
+        "rubric": rubric_dict(test),
+        "classes": results_data(db, test, labels_wanted=labels_wanted),
+    }
+
+
+def results_bundle(db: DBSession, selection):
+    """selection: [(test, [klas labels])]. One toets gives the classic single-toets file."""
+    if len(selection) == 1:
+        test, labels_wanted = selection[0]
+        return results_file(db, test, labels_wanted)
+    tests = []
+    for test, labels_wanted in selection:
+        ensure_share_ids(db, test)
+        tests.append({"rubric": rubric_dict(test),
+                      "classes": results_data(db, test, labels_wanted=labels_wanted)})
+    return {**_results_header(db), "version": RESULTS_BUNDLE_VERSION, "tests": tests}
+
+
+def export_options(db: DBSession):
+    """Per klas the toetsen it made, with how many students are fully graded."""
+    by_class = {}
+    tests = db.query(Test).order_by(Test.name).all()
+    for test in tests:
+        for c in results_data(db, test, shuffle=False):
+            entry = by_class.setdefault(c["class_name"], {"class_name": c["class_name"], "tests": []})
+            entry["tests"].append({
+                "test_id": test.id, "test_name": test.name, "label": c["label"],
+                "grading_method": test.grading_method,
+                "date": c["date"], "graded": c["graded"], "total": c["total"],
+            })
+    out = sorted(by_class.values(), key=lambda e: e["class_name"].lower())
+    for e in out:
+        e["tests"].sort(key=lambda t: (t["date"] or "", t["test_name"].lower()), reverse=True)
+    return out
+
+
+def _import_one(db: DBSession, inst, teacher, exported_at, rubric, classes):
+    """Store one toets of a results file. Classes replace earlier ones with the same
+    klas label from this colleague; other klassen from earlier files are kept."""
+    rubric = validate_rubric(copy.deepcopy(rubric))
+    if not isinstance(classes, list):
         raise SharingError("Het resultatenbestand is onvolledig.")
-    if inst == installation_id(db):
-        raise SharingError("Dit is je eigen resultatenbestand. Je eigen resultaten staan al automatisch in de vergelijking.")
-    clean = {"rubric": rubric, "classes": data["classes"], "teacher": teacher, "exported_at": data.get("exported_at")}
     row = db.query(ComparisonImport).filter(ComparisonImport.share_id == rubric["share_id"],
                                             ComparisonImport.installation_id == inst).first()
     replaced = row is not None
     if row is None:
         row = ComparisonImport(share_id=rubric["share_id"], installation_id=inst)
         db.add(row)
+        merged = list(classes)
+    else:
+        new_labels = {c.get("label") for c in classes}
+        kept = [c for c in ((row.data or {}).get("classes") or []) if c.get("label") not in new_labels]
+        merged = kept + list(classes)
     row.teacher_name = (teacher.get("name") or "").strip() or "Collega"
     row.test_name = rubric.get("name") or ""
-    row.exported_at = data.get("exported_at")
-    row.data = clean
+    row.exported_at = exported_at
+    # The newest file's rubric is used for the whole import
+    row.data = {"rubric": rubric, "classes": merged, "teacher": teacher, "exported_at": exported_at}
     row.imported_at = datetime.now()
-    db.commit()
     return {"share_id": rubric["share_id"], "replaced": replaced, "teacher_name": row.teacher_name,
-            "test_name": row.test_name}
+            "test_name": row.test_name, "classes": [c.get("label") for c in classes]}
+
+
+def import_results(db: DBSession, data):
+    _check_format(data, RESULTS_FORMAT, max_version=RESULTS_BUNDLE_VERSION)
+    teacher = data.get("teacher") or {}
+    inst = teacher.get("installation_id")
+    if "tests" in data:
+        parts = data.get("tests")
+        if not isinstance(parts, list) or not parts or not all(isinstance(t, dict) for t in parts):
+            raise SharingError("Het resultatenbestand is onvolledig.")
+    else:
+        parts = [{"rubric": data.get("rubric"), "classes": data.get("classes")}]
+    if not inst:
+        raise SharingError("Het resultatenbestand is onvolledig.")
+    if inst == installation_id(db):
+        raise SharingError("Dit is je eigen resultatenbestand. Je eigen resultaten staan al automatisch in de vergelijking.")
+    out = [_import_one(db, inst, teacher, data.get("exported_at"), t.get("rubric"), t.get("classes")) for t in parts]
+    db.commit()
+    return {"imports": out}
 
 
 # ── Comparing ──────────────────────────────────────────────────────────────────
@@ -949,6 +1013,8 @@ def _distribution(grades):
                 "7,0-7,9": sum(1 for c in cijfers if 7 <= c < 8),
                 "8+": sum(1 for c in cijfers if c >= 8),
             },
+            # Per whole cijfer 1-10, rounded down (6,4 counts as 6)
+            "hist": {str(n): sum(1 for c in cijfers if min(10, max(1, math.floor(c))) == n) for n in range(1, 11)},
         }
     return out
 
