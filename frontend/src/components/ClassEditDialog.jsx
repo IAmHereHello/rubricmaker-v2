@@ -1,15 +1,18 @@
 import { useState } from 'react'
 import * as api from '../api.js'
 import RoutePicker from './RoutePicker.jsx'
+import LevelPicker from './LevelPicker.jsx'
+import { guessLevel, levelLabel } from '../utils/levels.js'
 
 const THIS = '__this__'
 let tmpId = 0
 
 // Klas bewerken: class name and every student (name, colour, class) in one popup.
-// Nothing is saved until Opslaan.
-export default function ClassEditDialog({ className, students, allStudents, onClose, onSaved }) {
+// Nothing is saved until Opslaan. level: stored leerjaar + niveaus, or undefined (then guessed from the name).
+export default function ClassEditDialog({ className, level, students, allStudents, onClose, onSaved }) {
   const otherClasses = [...new Set(allStudents.map(s => s.class_name))].filter(c => c !== className).sort()
   const [name, setName] = useState(className)
+  const [lvl, setLvl] = useState(() => level || guessLevel(className))
   const [rows, setRows] = useState(() => students.map(s => ({
     key: `s${s.id}`, id: s.id, name: s.name, route: s.route, cls: THIS, deleted: false, orig: s,
   })))
@@ -56,6 +59,7 @@ export default function ClassEditDialog({ className, students, allStudents, onCl
     try {
       const newName = name.trim()
       if (newName !== className) await api.renameClass(className, newName)
+      if (levelLabel(lvl) !== levelLabel(level) || !level) await api.setClassLevel(newName, lvl)
       for (const r of deleting) await api.deleteStudent(r.id)
       for (const r of rows.filter(r => !r.deleted)) {
         const data = { name: r.name.trim(), route: r.route, class_name: r.cls === THIS ? newName : r.cls }
@@ -77,6 +81,13 @@ export default function ClassEditDialog({ className, students, allStudents, onCl
         <div className="field" style={{ marginBottom: 14 }}>
           <label>Klasnaam</label>
           <input type="text" value={name} onChange={e => { setName(e.target.value); setError('') }} style={{ maxWidth: 220 }} />
+        </div>
+        <div className="field" style={{ marginBottom: 14 }}>
+          <label>Leerjaar en niveau{levelLabel(lvl) && <span className="text-muted" style={{ fontWeight: 400 }}> (groep {levelLabel(lvl)})</span>}</label>
+          <LevelPicker value={lvl} onChange={setLvl} />
+          {!level && levelLabel(lvl) && (
+            <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>Ingevuld op basis van de klasnaam. Controleer het en klik op Opslaan.</div>
+          )}
         </div>
 
         <table className="class-edit-table">

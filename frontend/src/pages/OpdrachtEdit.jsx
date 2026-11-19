@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import * as api from '../api.js'
 import ShareLeaveGuard, { markUnshared } from '../components/ShareUpdatePrompt.jsx'
+import RubricLevels from '../components/RubricLevels.jsx'
 import BackButton from '../components/BackButton.jsx'
 import MathText, { MathPreview, MathHint } from '../components/MathText.jsx'
 import {
@@ -324,6 +325,8 @@ export default function OpdrachtEdit({ initialTest }) {
         </div>
         <BackButton fallback="/tests" />
       </div>
+
+      <RubricLevels test={test} onChange={levels => setTest(t => ({ ...t, levels }))} />
 
       {sectionsState.map((sec, si) => (
         <div key={sec.id} className="card">

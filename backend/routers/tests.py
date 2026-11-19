@@ -6,6 +6,7 @@ from ..database import get_db
 from ..models import Test
 from ..schemas import TestCreate, TestUpdate, TestOut
 from .. import opdracht_logic
+from ..class_levels import clean_labels
 
 router = APIRouter(prefix="/tests", tags=["tests"])
 
@@ -18,6 +19,7 @@ def _serialize_test(t: Test) -> dict:
         "grading_method": t.grading_method,
         "grade_config": t.grade_config,
         "share_id": t.share_id,
+        "levels": t.levels,
         "questions": sorted(
             [
                 {
@@ -79,9 +81,11 @@ def update_test(id: int, test: TestUpdate, db: Session = Depends(get_db)):
         obj.grading_method = test.grading_method
     if "grade_config" in fields:
         obj.grade_config = test.grade_config
+    if "levels" in fields:
+        obj.levels = clean_labels(test.levels)
     db.commit()
     db.refresh(obj)
-    if obj.grading_method == "opdracht":
+    if obj.grading_method == "opdracht" and fields != {"levels"}:
         opdracht_logic.sync_test(db, obj)
         db.refresh(obj)
     return obj

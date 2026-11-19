@@ -35,6 +35,7 @@ class TestUpdate(BaseModel):
     name: Optional[str] = None
     grading_method: Optional[str] = None
     grade_config: Optional[dict] = None
+    levels: Optional[List[str]] = None
 
 class TestOut(BaseModel):
     id: int
@@ -43,6 +44,7 @@ class TestOut(BaseModel):
     grading_method: Optional[str] = None
     grade_config: Optional[dict] = None
     share_id: Optional[str] = None
+    levels: Optional[List[str]] = None
     model_config = {"from_attributes": True}
 
 
@@ -192,10 +194,16 @@ class SchoolYearNewStudent(BaseModel):
     class_name: str
     route: str = "geel"
 
+class SchoolYearClassLevel(BaseModel):
+    class_name: str
+    leerjaar: Optional[int] = None
+    niveaus: str = ""
+
 class SchoolYearAdvanceRequest(BaseModel):
     outgoing_year: str                                    # "2024-2025"
     continuing_students: List[SchoolYearStudentTransfer]  # kept students with new class name
     new_students: List[SchoolYearNewStudent]
+    class_levels: Optional[List[SchoolYearClassLevel]] = None  # leerjaar + niveaus of next year's classes
 
 
 # ── Student grades ────────────────────────────────────────────────────────────

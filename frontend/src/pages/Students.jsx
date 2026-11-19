@@ -4,11 +4,13 @@ import * as api from '../api.js'
 import RoutePicker from '../components/RoutePicker.jsx'
 import ClassEditDialog from '../components/ClassEditDialog.jsx'
 import ClassTransferDialog from '../components/ClassTransferDialog.jsx'
+import LevelPicker from '../components/LevelPicker.jsx'
+import { guessLevel, levelLabel } from '../utils/levels.js'
 import { readJsonFile } from '../utils/shareFiles.js'
 
 const ROUTES = ['oranje', 'geel', 'blauw']
 const EMPTY = { name: '', class_name: '', route: 'oranje' }
-const IMPORT_EMPTY = { class_name: '', route: 'oranje', text: '' }
+const IMPORT_EMPTY = { class_name: '', route: 'oranje', text: '', level: null, levelTouched: false }
 
 function nowHHMM() {
   const d = new Date()
@@ -88,6 +90,7 @@ export default function Students() {
   const [transferClass, setTransferClass] = useState(null)
   const [busyRoute, setBusyRoute] = useState(null)
   const [students, setStudents] = useState([])
+  const [classLevels, setClassLevels] = useState({})
   const [editing, setEditing] = useState(null)   // null | student object | 'new'
   const [form, setForm] = useState(EMPTY)
   const [error, setError] = useState('')
@@ -118,7 +121,10 @@ export default function Students() {
   }, [editing])
 
   async function load() {
-    try { setStudents(await api.getStudents()) }
+    try {
+      const [st, lv] = await Promise.all([api.getStudents(), api.getClassLevels()])
+      setStudents(st); setClassLevels(lv)
+    }
     catch { setError('Fout bij laden van leerlingen.') }
   }
 
@@ -261,6 +267,8 @@ export default function Students() {
     const names = items.map(item => resolvedName(item.original, item.suffix))
     try {
       await api.importStudents({ class_name, route, names })
+      const isNewClass = !students.some(s => s.class_name === class_name)
+      if (isNewClass && levelLabel(importForm.level)) await api.setClassLevel(class_name, importForm.level)
       setImportMode(false); setImportForm(IMPORT_EMPTY)
       await load()
     } catch { setImportError('Importeren mislukt.') }
@@ -313,10 +321,16 @@ export default function Students() {
               <label>Klas</label>
               <input
                 type="text" value={importForm.class_name}
-                onChange={e => setImportForm(f => ({ ...f, class_name: e.target.value }))}
+                onChange={e => setImportForm(f => ({ ...f, class_name: e.target.value, level: f.levelTouched ? f.level : guessLevel(e.target.value) }))}
                 style={{ width: 80 }}
               />
             </div>
+            {importForm.class_name.trim() && !classes.includes(importForm.class_name.trim()) && (
+              <div className="field">
+                <label>Leerjaar en niveau</label>
+                <LevelPicker compact value={importForm.level} onChange={level => setImportForm(f => ({ ...f, level, levelTouched: true }))} />
+              </div>
+            )}
             <div className="field">
               <label>Route</label>
               <select value={importForm.route} onChange={e => setImportForm(f => ({ ...f, route: e.target.value }))}>
@@ -498,6 +512,7 @@ export default function Students() {
       {editClass && (
         <ClassEditDialog
           className={editClass}
+          level={classLevels[editClass]}
           students={byClass[editClass] || []}
           allStudents={students}
           onClose={() => setEditClass(null)}
@@ -533,6 +548,12 @@ export default function Students() {
                 <span style={{ color: '#888', fontWeight: 400, fontSize: 13, marginLeft: 8 }}>
                   ({byClass[cls].length} leerling{byClass[cls].length !== 1 ? 'en' : ''})
                 </span>
+                {levelLabel(classLevels[cls]) ? (
+                  <span className="test-tag level-tag" title="Leerjaar en niveau (aan te passen via Klas bewerken)">{levelLabel(classLevels[cls])}</span>
+                ) : (
+                  <button type="button" className="test-tag level-tag-missing" title="Stel leerjaar en niveau in"
+                    onClick={e => { e.stopPropagation(); setEditClass(cls) }}>Leerjaar instellen</button>
+                )}
               </strong>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <Link

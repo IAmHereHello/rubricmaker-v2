@@ -13,6 +13,8 @@ from ..models import (
     OpdrachtGroupScore, OpdrachtGroup, OpdrachtEntry, OpdrachtScore, OpdrachtSessionState, StudentNote,
 )
 from ..schemas import SchoolYearAdvanceRequest
+from .. import class_levels
+from ..models import ClassLevel
 
 router = APIRouter(prefix="/school-year", tags=["school-year"])
 
@@ -234,6 +236,17 @@ def advance_school_year(body: SchoolYearAdvanceRequest, db: DBSession = Depends(
         name = ns.name.strip()
         if name:
             db.add(Student(name=name, class_name=ns.class_name, route=ns.route))
+
+    # Leerjaar + niveaus of next year's classes (the wizard sends them; older clients don't)
+    if body.class_levels is not None:
+        db.query(ClassLevel).delete(synchronize_session=False)
+        db.flush()
+        seen = set()
+        for lvl in body.class_levels:
+            name = lvl.class_name.strip()
+            if name and name not in seen:
+                seen.add(name)
+                class_levels.set_level(db, name, lvl.leerjaar, lvl.niveaus)
 
     db.commit()
 

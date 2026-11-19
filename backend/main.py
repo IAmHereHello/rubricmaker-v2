@@ -4,7 +4,7 @@ from sqlalchemy import text
 
 from .database import engine
 from . import models
-from .routers import students, tests, questions, sessions, scores, progress, reports, grades, school_year, opdracht, leerlingrapport, sharing, klas
+from .routers import students, tests, questions, sessions, scores, progress, reports, grades, school_year, opdracht, leerlingrapport, sharing, klas, levels
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -28,6 +28,8 @@ def _migrate_db():
             # Klas overdragen
             "ALTER TABLE students ADD COLUMN share_key TEXT",
             "ALTER TABLE sessions ADD COLUMN share_key TEXT",
+            # Toetsen per leerjaar
+            "ALTER TABLE tests ADD COLUMN levels TEXT",
         ]:
             try:
                 conn.execute(text(stmt))
@@ -73,6 +75,7 @@ app.include_router(opdracht.router)
 app.include_router(leerlingrapport.router)
 app.include_router(sharing.router)
 app.include_router(klas.router)
+app.include_router(levels.router)
 
 
 @app.get("/")

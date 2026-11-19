@@ -226,3 +226,14 @@ export const renameClass = (class_name, new_name) =>
 export const errorText = (e, fallback) => e?.response?.data?.detail && typeof e.response.data.detail === 'string'
   ? e.response.data.detail
   : fallback
+
+// ── Leerjaar groups ───────────────────────────────────────────────────────────
+
+export const getClassLevels = () => http.get('/levels/classes').then(r => r.data)
+
+export const setClassLevel = (class_name, level) =>
+  http.put('/levels/classes', { class_name, leerjaar: level?.leerjaar || null, niveaus: level?.niveaus || '' }).then(r => r.data)
+
+export const getLevelSuggestions = () => http.get('/levels/suggestions').then(r => r.data)
+
+export const fillLevelSuggestions = () => http.post('/levels/fill').then(r => r.data)

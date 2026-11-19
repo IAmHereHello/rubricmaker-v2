@@ -1,5 +1,7 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import * as api from '../api.js'
+import LevelPicker from '../components/LevelPicker.jsx'
+import { guessLevel, nextYearLevel } from '../utils/levels.js'
 
 const ROUTES = ['oranje', 'geel', 'blauw']
 const ROUTE_LABELS = { oranje: 'Oranje', geel: 'Geel', blauw: 'Blauw' }
@@ -89,7 +91,7 @@ function Step1Overview({ outgoingYear, sessionCount, onNext, onCancel }) {
 // ── Step 2: Keep classes — typing input, auto-increment names, route editing ──
 
 function Step2KeepClasses({
-  existingClasses, studentsByClass,
+  existingClasses, studentsByClass, classLevels,
   keptEntries, setKeptEntries,
   routeOverrides, setRouteOverrides,
   onNext, onPrev, onCancel,
@@ -104,10 +106,12 @@ function Step2KeepClasses({
   function addKept() {
     const v = inputVal.trim()
     if (!v || !existingClasses.includes(v) || alreadyKept.has(v)) return
+    const newName = autoIncrement(v)
     setKeptEntries(prev => [...prev, {
       oldName: v,
-      newName: autoIncrement(v),
+      newName,
       expanded: false,
+      level: classLevels[v] ? nextYearLevel(classLevels[v]) : guessLevel(newName),
     }])
     setInputVal('')
     inputRef.current?.focus()
@@ -143,7 +147,7 @@ function Step2KeepClasses({
       <h2 style={{ margin: '0 0 8px' }}>Welke klassen blijven?</h2>
       <p className="text-muted" style={{ marginBottom: 16 }}>
         Typ een klasnaam om die over te nemen. Het nummer wordt automatisch verhoogd — je kunt de naam daarna aanpassen.
-        Klap een klas open om routes te wijzigen.
+        Klap een klas open om routes te wijzigen. Het leerjaar gaat automatisch één omhoog; controleer het per klas.
       </p>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
@@ -234,6 +238,12 @@ function Step2KeepClasses({
                 </button>
               </div>
 
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                <span className="text-muted" style={{ fontSize: 13 }}>Leerjaar {entry.newName}:</span>
+                <LevelPicker compact value={entry.level}
+                  onChange={level => setKeptEntries(prev => prev.map(e => e.oldName === entry.oldName ? { ...e, level } : e))} />
+              </div>
+
               {/* Expandable route editor */}
               {entry.expanded && (
                 <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #eef0f4' }}>
@@ -278,7 +288,7 @@ function Step2KeepClasses({
 
 // ── Step 3: New class names ────────────────────────────────────────────────────
 
-function Step3NewClasses({ newClasses, setNewClasses, keptEntries, onNext, onPrev, onCancel }) {
+function Step3NewClasses({ newClasses, setNewClasses, newClassLevels, setNewClassLevels, keptEntries, onNext, onPrev, onCancel }) {
   const [inputVal, setInputVal] = useState('')
   const [editIdx, setEditIdx] = useState(null)
   const [editVal, setEditVal] = useState('')
@@ -288,6 +298,7 @@ function Step3NewClasses({ newClasses, setNewClasses, keptEntries, onNext, onPre
     const v = inputVal.trim()
     if (!v || newClasses.includes(v)) return
     setNewClasses(prev => [...prev, v])
+    setNewClassLevels(prev => ({ ...prev, [v]: prev[v] || guessLevel(v) }))
     setInputVal('')
     inputRef.current?.focus()
   }
@@ -300,7 +311,11 @@ function Step3NewClasses({ newClasses, setNewClasses, keptEntries, onNext, onPre
 
   function saveEdit() {
     const v = editVal.trim()
-    if (v) setNewClasses(prev => prev.map((c, i) => i === editIdx ? v : c))
+    if (v) {
+      const old = newClasses[editIdx]
+      setNewClasses(prev => prev.map((c, i) => i === editIdx ? v : c))
+      setNewClassLevels(prev => ({ ...prev, [v]: prev[old] || guessLevel(v) }))
+    }
     setEditIdx(null)
   }
 
@@ -350,7 +365,11 @@ function Step3NewClasses({ newClasses, setNewClasses, keptEntries, onNext, onPre
               </>
             ) : (
               <>
-                <span style={{ flex: 1, fontWeight: 600 }}>{cls}</span>
+                <span style={{ fontWeight: 600, minWidth: 50 }}>{cls}</span>
+                <span style={{ flex: 1 }}>
+                  <LevelPicker compact value={newClassLevels[cls]}
+                    onChange={level => setNewClassLevels(prev => ({ ...prev, [cls]: level }))} />
+                </span>
                 <button className="btn btn-secondary btn-sm" onClick={() => startEdit(i)} style={{ fontSize: 11 }}>
                   Naam wijzigen
                 </button>
@@ -745,6 +764,11 @@ export default function SchoolYearWizard({ status, allStudents, onClose, onDone 
 
   // Step 3: new (non-kept) class names
   const [newClasses, setNewClasses] = useState([])
+  const [newClassLevels, setNewClassLevels] = useState({})   // {className: {leerjaar, niveaus}}
+
+  // Leerjaar + niveaus of this year's classes (kept classes go up one year)
+  const [classLevels, setClassLevels] = useState({})
+  useEffect(() => { api.getClassLevels().then(setClassLevels).catch(() => {}) }, [])
 
   // Step 4: individual student transfers from non-kept classes
   const [transfers, setTransfers] = useState([])
@@ -820,6 +844,10 @@ export default function SchoolYearWizard({ status, allStudents, onClose, onDone 
           new_route: new_route || null,
         })),
         new_students: newStudentsFlat,
+        class_levels: [
+          ...keptEntries.map(e => ({ class_name: e.newName || e.oldName, leerjaar: e.level?.leerjaar || null, niveaus: e.level?.niveaus || '' })),
+          ...newClasses.map(c => ({ class_name: c, leerjaar: newClassLevels[c]?.leerjaar || null, niveaus: newClassLevels[c]?.niveaus || '' })),
+        ],
       })
       onDone()
     } catch {
@@ -871,6 +899,7 @@ export default function SchoolYearWizard({ status, allStudents, onClose, onDone 
           <Step2KeepClasses
             existingClasses={existingClasses}
             studentsByClass={studentsByClass}
+            classLevels={classLevels}
             keptEntries={keptEntries}
             setKeptEntries={setKeptEntries}
             routeOverrides={routeOverrides}
@@ -885,6 +914,8 @@ export default function SchoolYearWizard({ status, allStudents, onClose, onDone 
           <Step3NewClasses
             newClasses={newClasses}
             setNewClasses={setNewClasses}
+            newClassLevels={newClassLevels}
+            setNewClassLevels={setNewClassLevels}
             keptEntries={keptEntries}
             onNext={() => setStep(4)}
             onPrev={() => setStep(2)}
