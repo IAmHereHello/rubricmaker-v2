@@ -172,6 +172,7 @@ export function analyzePage(canvas) {
   const gray = toGray(img.data, w * h)
   const paper = paperLevel(gray)
   const threshold = paper * 0.5
+  if (!qr && isEmptyPage(gray, w, h, threshold)) return { empty: true }
   // Rough marker size if the paper fills the image; a photo may show it smaller
   const expectedSide = SHEET.markerMm * Math.min(w, h) / SHEET.widthMm
   const fw = Math.round(w * 0.3), fh = Math.round(h * 0.25)
@@ -218,6 +219,14 @@ export function analyzePage(canvas) {
   }
 
   return { sheetId: qr.id, rect: straighten(img, best.H) }
+}
+
+// An empty back side from a double-sided scan: almost no ink away from the edges.
+function isEmptyPage(gray, w, h, threshold) {
+  const x0 = Math.round(w * 0.06), x1 = w - x0, y0 = Math.round(h * 0.06), y1 = h - y0
+  let n = 0, t = 0
+  for (let y = y0; y < y1; y += 2) for (let x = x0; x < x1; x += 2) { t++; if (gray[y * w + x] < threshold) n++ }
+  return t > 0 && n / t < 0.002
 }
 
 // Without a QR code: the rotation that puts the most ink where the QR code is printed.

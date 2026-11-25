@@ -61,6 +61,7 @@ export default function ScanImport() {
   const [phase, setPhase] = useState('pick')   // pick | reading | check | saving | done
   const [progress, setProgress] = useState(null)
   const [failed, setFailed] = useState([])     // pages that could not be read
+  const [emptyPages, setEmptyPages] = useState(0)   // empty back sides, skipped
   const [rubrics, setRubrics] = useState([])
   const [tests, setTests] = useState({})
   const [students, setStudents] = useState([])
@@ -82,6 +83,7 @@ export default function ScanImport() {
     const bad = []
     const sheetCache = {}
     let index = 0
+    let empties = 0
     try {
       const [studs, sess, tlist] = await Promise.all([api.getStudents(), api.getSessions(), api.getTests()])
       setStudents(studs)
@@ -97,6 +99,7 @@ export default function ScanImport() {
           try {
             const canvas = await scan.render(n)
             const res = analyzePage(canvas)
+            if (res.empty) { empties++; continue }
             if (res.error) {
               bad.push({ label, error: res.error, image: canvas.toDataURL('image/jpeg', 0.5) })
               continue
@@ -147,6 +150,7 @@ export default function ScanImport() {
       setTests(loaded)
       setRubrics(groups)
       setFailed(bad)
+      setEmptyPages(empties)
       setOpen(new Set(groups.filter(r => !r.approved).map(r => r.key)))
       setPhase('check')
     } catch (e) {
@@ -407,6 +411,7 @@ export default function ScanImport() {
           <h1>Importeer scans: controleren</h1>
           <div className="text-muted" style={{ marginTop: 4 }}>
             {rubrics.length} rubric{rubrics.length === 1 ? '' : 's'} gevonden{toCheck > 0 && `, ${toCheck} nog niet goedgekeurd`}.
+            {emptyPages > 0 && ` ${emptyPages} lege pagina${emptyPages === 1 ? '' : "'s"} overgeslagen. `}
             Klik op een hokje in de scan of kies hiernaast om iets te verbeteren.
           </div>
         </div>
