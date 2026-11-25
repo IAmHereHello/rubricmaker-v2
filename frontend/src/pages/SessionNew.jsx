@@ -6,6 +6,7 @@ export default function SessionNew() {
   const [tests, setTests] = useState([])
   const [students, setStudents] = useState([])
   const [sessions, setSessions] = useState([])
+  const [imports, setImports] = useState([])   // lopende scan-imports
   const [testId, setTestId] = useState('')
   const [className, setClassName] = useState('')
   const [gradingMode, setGradingMode] = useState('horizontal')
@@ -21,6 +22,7 @@ export default function SessionNew() {
         if (t.length) setTestId(String(t[0].id))
       })
       .catch(() => setError('Fout bij laden van gegevens.'))
+    api.getScanImports().then(setImports).catch(() => {})
   }, [])
 
   const classes = [...new Set(students.map(s => s.class_name))].sort()
@@ -46,6 +48,14 @@ export default function SessionNew() {
     } catch { setError('Sessie verwijderen mislukt.') }
   }
 
+  async function handleDeleteImport(imp) {
+    if (!window.confirm('Deze scan-import verwijderen? De scans gaan weg; punten die je al hebt opgeslagen blijven staan.')) return
+    try {
+      await api.deleteScanImport(imp.id)
+      setImports(prev => prev.filter(i => i.id !== imp.id))
+    } catch { setError('Import verwijderen mislukt.') }
+  }
+
   async function start() {
     if (!testId || !className) { setError('Selecteer een toets en een klas.'); return }
     try {
@@ -63,7 +73,7 @@ export default function SessionNew() {
 
       {error && <div className="alert alert-error">{error}</div>}
 
-      {inProgress.length > 0 && (
+      {(inProgress.length > 0 || imports.length > 0) && (
         <div className="card" style={{ marginBottom: 24 }}>
           <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 14, color: '#1e3a5f' }}>
             Lopende sessies
@@ -79,6 +89,24 @@ export default function SessionNew() {
               </tr>
             </thead>
             <tbody>
+              {imports.map(imp => (
+                <tr key={`scan-${imp.id}`} data-scan-import={imp.id}>
+                  <td>{new Date(imp.created_at).toLocaleDateString('nl-NL')}</td>
+                  <td>
+                    Scan-import
+                    <span className="text-muted" style={{ fontSize: 12 }}> · {imp.summary || 'nog geen leerlingen gekoppeld'}</span>
+                  </td>
+                  <td></td>
+                  <td><span style={{ color: '#c07000', fontSize: 13 }}>{imp.done_count} / {imp.total_count} gecontroleerd</span></td>
+                  <td style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <Link to={`/scans/import/${imp.id}`} className="btn btn-primary btn-sm">Hervat →</Link>
+                    <button className="btn btn-sm" style={{ color: '#b00', background: 'none', border: '1px solid #ddd' }}
+                      onClick={() => handleDeleteImport(imp)} title="Import en scans verwijderen">
+                      Verwijderen
+                    </button>
+                  </td>
+                </tr>
+              ))}
               {inProgress.map(sess => {
                 const state = sessionState(sess)
                 const notStarted = sess.student_count === 0
