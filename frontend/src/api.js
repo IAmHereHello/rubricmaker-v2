@@ -248,3 +248,14 @@ export const getPrintSheets = (ids) =>
 
 export const getLatestPrintSheets = (test_id, student_id, route) =>
   http.get('/print-sheets/latest', { params: { test_id, student_id: student_id ?? undefined, route: route || undefined } }).then(r => r.data)
+
+// ── Lopende scan-imports ────────────────────────────────────────────────────────
+
+export const getScanImports = () => http.get('/scan-imports').then(r => r.data)
+export const getScanImport = (id) => http.get(`/scan-imports/${id}`).then(r => r.data)
+export const createScanImport = (body) => http.post('/scan-imports', body).then(r => r.data)
+export const updateScanImport = (id, body) => http.put(`/scan-imports/${id}`, body).then(r => r.data)
+export const deleteScanImport = (id) => http.delete(`/scan-imports/${id}`).then(r => r.data)
+export const putScanPage = (id, n, blob) =>
+  http.put(`/scan-imports/${id}/pages/${n}`, blob, { headers: { 'Content-Type': 'image/jpeg' } }).then(r => r.data)
+export const scanPageUrl = (id, n) => `/api/scan-imports/${id}/pages/${n}`

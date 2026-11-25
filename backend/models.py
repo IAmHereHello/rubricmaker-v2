@@ -279,3 +279,17 @@ class PrintSheet(Base):
     pages = Column(Integer, nullable=False, default=1)
     layout = Column(JSON, nullable=False)
     created_at = Column(DateTime, server_default=func.now())
+
+
+class ScanImport(Base):
+    """A scan import that is being checked (Importeer scans). `state` holds what was read and
+    what the teacher chose; the page images live as JPEG files in scans/<id>/ next to the
+    database. Removed (with its files) when every leerling is checked or the teacher deletes it."""
+    __tablename__ = "scan_imports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, server_default=func.now())
+    summary = Column(String, nullable=False, default="")
+    done_count = Column(Integer, nullable=False, default=0)
+    total_count = Column(Integer, nullable=False, default=0)
+    state = Column(JSON, nullable=False)

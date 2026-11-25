@@ -22,6 +22,7 @@ import OpdrachtGrade from './pages/OpdrachtGrade.jsx'
 import OpdrachtReport from './pages/OpdrachtReport.jsx'
 import RubricImport from './pages/RubricImport.jsx'
 import ScanImport from './pages/ScanImport.jsx'
+import ScanReview from './pages/ScanReview.jsx'
 import Compare from './pages/Compare.jsx'
 import OpdrachtSwitch from './components/OpdrachtSwitch.jsx'
 import { BackTrailTracker } from './components/BackButton.jsx'
@@ -104,6 +105,7 @@ const router = createBrowserRouter(createRoutesFromElements(
     <Route path="/tests" element={<TestList />} />
     <Route path="/tests/import" element={<RubricImport />} />
     <Route path="/scans/import" element={<ScanImport />} />
+    <Route path="/scans/import/:id" element={<ScanReview />} />
     <Route path="/tests/:id/edit" element={<TestEdit />} />
     <Route path="/sessions/new" element={<SessionNew />} />
     <Route path="/sessions/:id/grade" element={<OpdrachtSwitch normal={Grade} opdracht={OpdrachtGrade} />} />

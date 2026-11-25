@@ -31,3 +31,7 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# Scan-import pages (student data)
+scans/
+backend/scans/
