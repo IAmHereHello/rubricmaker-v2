@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import * as api from '../api.js'
 import ResultsExportDialog from '../components/ResultsExportDialog.jsx'
 import BlankRubricDialog from '../components/BlankRubricDialog.jsx'
+import AnswerModelDialog from '../components/AnswerModelDialog.jsx'
 import { downloadJson, readJsonFile, safeFileName } from '../utils/shareFiles.js'
 import { getUnshared, clearUnshared, UpdateDownloadedDialog } from '../components/ShareUpdatePrompt.jsx'
 import { parseLabel, sortLabels } from '../utils/levels.js'
@@ -19,7 +20,7 @@ function writeStore(key, value) {
 }
 
 // ⋮ menu at the right of a toets: Bewerken, Print rubric, Deel rubric, Exporteer resultaten, Verwijder
-function TestMenu({ onEdit, onPrint, onShare, onExport, onDelete }) {
+function TestMenu({ onEdit, onPrint, onAnswers, onShare, onExport, onDelete }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
   useEffect(() => {
@@ -39,6 +40,7 @@ function TestMenu({ onEdit, onPrint, onShare, onExport, onDelete }) {
         <div className="kebab-menu" role="menu">
           <button type="button" className="kebab-item" role="menuitem" onClick={pick(onEdit)}>Bewerken</button>
           <button type="button" className="kebab-item" role="menuitem" onClick={pick(onPrint)} title="Rubric om op papier in te vullen (blanco of met namen), later te scannen">Print rubric</button>
+          {onAnswers && <button type="button" className="kebab-item" role="menuitem" onClick={pick(onAnswers)} title="Alle opgaven met antwoord en punten, om mee na te kijken">Print antwoordenmodel</button>}
           <button type="button" className="kebab-item" role="menuitem" onClick={pick(onShare)} title="Download de rubric als bestand voor collega's">Deel rubric</button>
           <button type="button" className="kebab-item" role="menuitem" onClick={pick(onExport)} title="Download de resultaten zonder namen, om te vergelijken in een vergadering">Exporteer resultaten</button>
           <button type="button" className="kebab-item danger" role="menuitem" onClick={pick(onDelete)}>Verwijder</button>
@@ -56,6 +58,7 @@ export default function TestList() {
   const [notice, setNotice] = useState('')
   const [exportFor, setExportFor] = useState(null)   // test id whose results export dialog is open
   const [printFor, setPrintFor] = useState(null)     // test id whose blank print dialog is open
+  const [answersFor, setAnswersFor] = useState(null) // test id whose answer model dialog is open
   const fileRef = useRef(null)
   const [unshared, setUnshared] = useState(getUnshared)
   const [downloaded, setDownloaded] = useState(null)   // file name for the "Update gedownload" popup
@@ -174,6 +177,7 @@ export default function TestList() {
           <TestMenu
             onEdit={() => navigate(`/tests/${t.id}/edit`)}
             onPrint={() => setPrintFor(t.id)}
+            onAnswers={t.grading_method === 'opdracht' ? null : () => setAnswersFor(t.id)}
             onShare={() => shareRubric(t)}
             onExport={() => setExportFor(t.id)}
             onDelete={() => remove(t.id)}
@@ -210,6 +214,7 @@ export default function TestList() {
       {error && <div className="alert alert-error">{error}</div>}
       {notice && <div className="alert alert-success">{notice}</div>}
       {downloaded && <UpdateDownloadedDialog fileName={downloaded} onClose={() => setDownloaded(null)} />}
+      {answersFor !== null && <AnswerModelDialog testId={answersFor} onClose={() => setAnswersFor(null)} />}
       {printFor !== null && <BlankRubricDialog testId={printFor} onClose={() => setPrintFor(null)} />}
       {exportFor !== null && (
         <ResultsExportDialog testId={exportFor} onClose={() => setExportFor(null)}
