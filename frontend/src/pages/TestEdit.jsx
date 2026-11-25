@@ -8,6 +8,7 @@ import { getCijferConfig } from '../utils/gradingLogic.js'
 import OpdrachtEdit from './OpdrachtEdit.jsx'
 import ShareLeaveGuard, { markUnshared } from '../components/ShareUpdatePrompt.jsx'
 import MathText, { MathPreview, MathHint } from '../components/MathText.jsx'
+import GraphTools from '../components/GraphTools.jsx'
 
 const ROUTES_ALL = ['oranje', 'geel', 'blauw']
 const EMPTY_Q = { description: '', answer: '', max_score: 1, routes: ['oranje', 'geel', 'blauw'], domain: DOMAINS[0], pyramid_level: PYRAMID_LEVELS[0].value, learning_goal: '', learning_goal_threshold: '' }
@@ -268,6 +269,7 @@ export default function TestEdit() {
             />
             <MathPreview text={qForm.description} />
             <MathHint />
+            <GraphTools text={qForm.description} onChange={v => setQForm(f => ({ ...f, description: v }))} />
           </div>
 
           <div className="field" style={{ marginBottom: 12 }}>
@@ -278,6 +280,7 @@ export default function TestEdit() {
               rows={2}
             />
             <MathPreview text={qForm.answer} />
+            <GraphTools text={qForm.answer} onChange={v => setQForm(f => ({ ...f, answer: v }))} />
           </div>
 
           <div className="form-row">

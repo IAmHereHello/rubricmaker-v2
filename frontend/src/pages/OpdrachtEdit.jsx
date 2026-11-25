@@ -5,6 +5,7 @@ import ShareLeaveGuard, { markUnshared } from '../components/ShareUpdatePrompt.j
 import RubricLevels from '../components/RubricLevels.jsx'
 import BackButton from '../components/BackButton.jsx'
 import MathText, { MathPreview, MathHint } from '../components/MathText.jsx'
+import GraphTools from '../components/GraphTools.jsx'
 import {
   ROUTES, LEVELS, newId, emptyLevels, applies, criterionMax, levelsFor,
 } from '../utils/opdracht.js'
@@ -52,6 +53,7 @@ function LevelsGrid({ levels, onChange }) {
             style={{ width: '100%', fontSize: 13 }}
           />
           <MathPreview text={levels?.[l.key]?.text} />
+          <GraphTools text={levels?.[l.key]?.text} onChange={v => onChange(l.key, 'text', v)} />
         </div>
       ))}
       <div style={{ gridColumn: '1 / -1' }}><MathHint /></div>
