@@ -261,3 +261,21 @@ class ClassLevel(Base):
     class_name = Column(String, primary_key=True)
     leerjaar = Column(Integer, nullable=False)
     niveaus = Column(String, nullable=False, default="")
+
+
+class PrintSheet(Base):
+    """One printed page of a rubric (blank or per leerling), so a scan of it can be read back.
+
+    The QR code on the page holds only `id`; `layout` stores where every tick box sits on
+    the page in mm (measured when the PDF was made), so the rubric may be edited later.
+    """
+    __tablename__ = "print_sheets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    test_id = Column(Integer, ForeignKey("tests.id", ondelete="CASCADE"), nullable=False, index=True)
+    student_id = Column(Integer, nullable=True)   # null = blank sheet (name written by hand)
+    route = Column(String, nullable=True)
+    page = Column(Integer, nullable=False, default=1)    # 1-based page within this student's sheet
+    pages = Column(Integer, nullable=False, default=1)
+    layout = Column(JSON, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())

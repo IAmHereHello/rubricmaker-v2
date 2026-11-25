@@ -237,3 +237,11 @@ export const setClassLevel = (class_name, level) =>
 export const getLevelSuggestions = () => http.get('/levels/suggestions').then(r => r.data)
 
 export const fillLevelSuggestions = () => http.post('/levels/fill').then(r => r.data)
+
+// ── Printbare rubrics (scan-import) ─────────────────────────────────────────────
+
+export const savePrintSheets = (test_id, sheets) =>
+  http.post('/print-sheets', { test_id, sheets }).then(r => r.data)
+
+export const getPrintSheets = (ids) =>
+  http.get('/print-sheets', { params: { ids: ids.join(',') } }).then(r => r.data)
