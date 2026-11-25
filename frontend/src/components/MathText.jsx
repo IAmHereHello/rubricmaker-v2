@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef } from 'react'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import { splitMath, prepareLatex } from '../utils/mathText.js'
+import FunctionGraph from './FunctionGraph.jsx'
 
 function render(latex, displayMode) {
   try {
@@ -42,6 +43,7 @@ export default function MathText({ text, showErrors = false }) {
     <>
       {parts.map((p, i) => {
         if (p.type === 'text') return <span key={i}>{p.value}</span>
+        if (p.type === 'graph') return <FunctionGraph key={i} body={p.value} showErrors={showErrors} />
         const display = p.type === 'display'
         const html = render(p.value, display)
         if (html == null) {
@@ -59,7 +61,7 @@ export default function MathText({ text, showErrors = false }) {
 // Under a text field in the editors: what the text will look like, shown once
 // it contains a formula.
 export function MathPreview({ text }) {
-  if (!text || !text.includes('$')) return null
+  if (!text || !(text.includes('$') || text.includes('[[grafiek'))) return null
   return (
     <div className="math-preview">
       <span className="math-preview-label">Voorbeeld</span>

@@ -1,7 +1,9 @@
 // Formulas in rubric text: `$...$` inside a sentence, `$$...$$` on its own line.
 // The text is stored exactly as typed; this only decides how it is shown.
 
-// Split text into plain parts and formulas. `\$` is a literal dollar sign and a
+import { GRAPH_OPEN, GRAPH_CLOSE } from './graph.js'
+
+// Split text into plain parts, formulas and graphs (`[[grafiek: ...]]`). `\$` is a literal dollar sign and a
 // `$` without a partner stays a dollar sign.
 export function splitMath(text) {
   const src = text == null ? '' : String(text)
@@ -12,6 +14,17 @@ export function splitMath(text) {
   let i = 0
   while (i < src.length) {
     const ch = src[i]
+    if (ch === '[' && src.startsWith(GRAPH_OPEN, i)) {
+      const end = src.indexOf(GRAPH_CLOSE, i + GRAPH_OPEN.length)
+      if (end !== -1) {
+        flush()
+        parts.push({ type: 'graph', value: src.slice(i + GRAPH_OPEN.length, end) })
+        i = end + GRAPH_CLOSE.length
+        // The line break right after a graph is part of the block.
+        if (src[i] === '\n') i++
+        continue
+      }
+    }
     if (ch === '\\' && src[i + 1] === '$') { plain += '$'; i += 2; continue }
     if (ch !== '$') { plain += ch; i++; continue }
 

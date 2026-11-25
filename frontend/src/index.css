@@ -825,3 +825,15 @@ tr:hover td { background: #fafbfd; }
 .ci-lines li { margin: 2px 0; }
 .ci-old { color: #a05800; }
 .ci-new { color: #1a7a43; font-weight: 600; }
+
+/* ── Function graphs in rubric text ──────────────────────────────────────── */
+.graph-tools { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; }
+.graph-tools-btn {
+  background: none; border: none; padding: 0; cursor: pointer;
+  font-size: 12px; color: #2563eb; font-weight: 500;
+}
+.graph-tools-btn:hover { text-decoration: underline; }
+.graph-dialog { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.graph-dialog-numbers { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.graph-dialog-numbers .field:last-child { grid-column: 1 / -1; }
+@media (max-width: 600px) { .graph-dialog { grid-template-columns: 1fr; } }
