@@ -245,3 +245,6 @@ export const savePrintSheets = (test_id, sheets) =>
 
 export const getPrintSheets = (ids) =>
   http.get('/print-sheets', { params: { ids: ids.join(',') } }).then(r => r.data)
+
+export const getLatestPrintSheets = (test_id, student_id, route) =>
+  http.get('/print-sheets/latest', { params: { test_id, student_id: student_id ?? undefined, route: route || undefined } }).then(r => r.data)

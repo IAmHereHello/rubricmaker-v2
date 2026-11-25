@@ -58,6 +58,7 @@ export default function SessionNew() {
     <div className="page">
       <div className="page-header">
         <h1>Nakijksessie starten</h1>
+        <button className="btn btn-secondary" onClick={() => navigate('/scans/import')} title="Lees ingevulde rubrics van Print rubric in vanuit een scan">Importeer scans</button>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}

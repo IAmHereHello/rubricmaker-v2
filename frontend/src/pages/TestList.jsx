@@ -203,7 +203,6 @@ export default function TestList() {
         <h1>Toetsen</h1>
         <div className="gap-8">
           <input ref={fileRef} type="file" accept=".rubric,application/json" style={{ display: 'none' }} onChange={chooseImport} />
-          <button className="btn btn-secondary" onClick={() => navigate('/scans/import')} title="Lees ingevulde rubrics van Print rubric in vanuit een scan">Importeer scans</button>
           <button className="btn btn-secondary" onClick={() => fileRef.current?.click()}>Importeer rubric</button>
         </div>
       </div>

@@ -18,6 +18,39 @@ const STATUS_STYLE = {
 }
 const STATUS_TEXT = { ok: 'Herkend', check: 'Controleren', empty: 'Leeg' }
 
+const TIP = 'Scan opnieuw, of kijk deze leerling met de hand na.'
+
+// Pages the rubric expects but the scan doesn't have.
+function missingOf(pages) {
+  const expected = pages[0].sheet.pages
+  const out = []
+  for (let n = 1; n <= expected; n++) if (!pages.some(q => q.sheet.page === n)) out.push(n)
+  return out
+}
+
+// Students grouped by class, for the "Kies leerling" lists.
+function studentsByClass(students) {
+  const m = {}
+  for (const s of students) (m[s.class_name] ||= []).push(s)
+  return Object.entries(m)
+    .sort(([a], [b]) => a.localeCompare(b, 'nl', { numeric: true }))
+    .map(([c, list]) => [c, [...list].sort((a, b) => a.name.localeCompare(b.name, 'nl'))])
+}
+
+function StudentSelect({ value, students, onChange }) {
+  const byClass = useMemo(() => studentsByClass(students), [students])
+  return (
+    <select value={value ?? ''} onChange={e => onChange(e.target.value ? Number(e.target.value) : null)}>
+      <option value="">Kies leerling...</option>
+      {byClass.map(([c, list]) => (
+        <optgroup key={c} label={`Klas ${c}`}>
+          {list.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </optgroup>
+      ))}
+    </select>
+  )
+}
+
 function dateNL(iso) {
   return iso ? new Date(iso).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
 }
@@ -31,6 +64,7 @@ export default function ScanImport() {
   const [rubrics, setRubrics] = useState([])
   const [tests, setTests] = useState({})
   const [students, setStudents] = useState([])
+  const [allTests, setAllTests] = useState([])  // for linking a page without a readable QR code
   const [sessions, setSessions] = useState([])
   const [targets, setTargets] = useState({})   // `${testId}|${class}` → session id | NEW
   const [overwrite, setOverwrite] = useState(false)
@@ -49,9 +83,10 @@ export default function ScanImport() {
     const sheetCache = {}
     let index = 0
     try {
-      const [studs, sess] = await Promise.all([api.getStudents(), api.getSessions()])
+      const [studs, sess, tlist] = await Promise.all([api.getStudents(), api.getSessions(), api.getTests()])
       setStudents(studs)
       setSessions(sess)
+      setAllTests(tlist)
       for (const file of files) {
         const scan = await openScan(file)
         for (let n = 1; n <= scan.pages; n++) {
@@ -66,13 +101,19 @@ export default function ScanImport() {
               bad.push({ label, error: res.error, image: canvas.toDataURL('image/jpeg', 0.5) })
               continue
             }
+            if (res.noQr) {
+              bad.push({ index, label, assignable: true, rect: res.rect, image: rectToDataUrl(res.rect, null, 0.6),
+                error: 'De QR-code is onleesbaar. Kies hieronder de toets en de leerling, dan worden de hokjes alsnog gelezen.' })
+              continue
+            }
             if (!(res.sheetId in sheetCache)) {
               const [sheet] = await api.getPrintSheets([res.sheetId])
               sheetCache[res.sheetId] = sheet || null
             }
             const sheet = sheetCache[res.sheetId]
             if (!sheet) {
-              bad.push({ label, error: 'Dit blad is niet met deze Rubricmaker geprint.', image: canvas.toDataURL('image/jpeg', 0.5) })
+              bad.push({ index, label, assignable: true, rect: res.rect, image: rectToDataUrl(res.rect, null, 0.6),
+                error: 'Dit blad is niet met deze Rubricmaker geprint. Kies de toets en de leerling; de hokjes worden gelezen met de laatst geprinte indeling, als die er is.' })
               continue
             }
             pages.push({
@@ -92,9 +133,16 @@ export default function ScanImport() {
       for (const id of testIds) {
         try { loaded[id] = await api.getTest(id) } catch { /* deleted toets: shown as unknown */ }
       }
+      const known = new Set(studs.map(s => s.id))
       const groups = groupPages(pages)
         .filter(r => loaded[r.testId])
-        .map(r => ({ ...r, approved: !r.blank && openItems(r).length === 0 && !r.missingPages.length }))
+        // Printed for a leerling who has since been removed: the teacher picks one
+        .map(r => (r.studentId && !known.has(r.studentId) ? { ...r, studentId: null, lostStudent: true } : r))
+        .map(r => ({
+          ...r,
+          approved: !r.blank && !r.lostStudent && openItems(r).length === 0 && !r.missingPages.length
+            && !rubricChanges(r, loaded[r.testId], studs.find(s => s.id === r.studentId)).length,
+        }))
       for (const p of pages) if (!loaded[p.sheet.test_id]) bad.push({ label: p.label, error: 'De toets van dit blad bestaat niet meer.' })
       setTests(loaded)
       setRubrics(groups)
@@ -120,6 +168,70 @@ export default function ScanImport() {
   function toggleOpen(key) {
     setOpen(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
   }
+
+  // A page without a readable (or known) QR code: the teacher said whose it is.
+  // Read it with the most recent print of that toets for that leerling.
+  async function assignPage(f, testId, studentId, pageNo) {
+    setError('')
+    try {
+      const test = tests[testId] || await api.getTest(testId)
+      const student = studentById[studentId]
+      const sheets = await api.getLatestPrintSheets(testId, studentId, student.route)
+      const sheet = sheets.find(s => s.page === pageNo) || (sheets.length === 1 ? sheets[0] : null)
+      let readings
+      if (sheet) readings = readPage(f.rect, sheet.layout)
+      else {
+        readings = {}
+        const why = { status: 'empty', reason: 'Niet automatisch gelezen', value: null }
+        if (test.grading_method === 'opdracht') for (const { criterion } of allCriteria(test)) readings[criterion.id] = { ...why, kind: 'c' }
+        else for (const q of test.questions) if ((q.routes || []).includes(student.route)) readings[q.id] = { ...why, kind: 'q' }
+      }
+      const page = {
+        index: f.index, label: f.label, image: f.image, readings,
+        sheet: sheet
+          ? { ...sheet, student_id: studentId }
+          : { test_id: testId, student_id: studentId, route: student.route, page: pageNo || 1, pages: 1, layout: { boxes: [], cells: [] } },
+      }
+      const fallback = sheet ? 'layout' : 'none'
+      setTests(t => ({ ...t, [testId]: test }))
+      // Another page of the same rubric already in the scan: add this page to it
+      const same = sheet && rubrics.find(r => r.testId === testId && r.studentId === studentId && !r.pages.some(q => q.sheet.page === page.sheet.page))
+      const openKey = same ? same.key : `m:${f.index}`
+      setRubrics(rs => {
+        if (same) {
+          return rs.map(r => {
+            if (r.key !== same.key) return r
+            const pagesNew = [...r.pages, page].sort((a, b) => a.sheet.page - b.sheet.page)
+            return { ...r, pages: pagesNew, missingPages: missingOf(pagesNew), items: { ...r.items, ...readings }, fallback, approved: false }
+          })
+        }
+        return [...rs, {
+          key: openKey, testId, route: page.sheet.route ?? student.route, studentId, blank: false,
+          pages: [page], missingPages: missingOf([page]), items: readings, fallback, approved: false,
+        }]
+      })
+      setFailed(list => list.filter(x => x !== f))
+      setOpen(prev => new Set(prev).add(openKey))
+    } catch (e) {
+      setError(api.errorText(e, 'Deze pagina kon niet gelezen worden.'))
+    }
+  }
+
+  // Rubrics of the same leerling for the same toets: only one may be stored.
+  const dupKey = r => (r.studentId ? `${r.testId}|${r.studentId}` : null)
+  const dupCount = useMemo(() => {
+    const m = {}
+    for (const r of rubrics) { const k = dupKey(r); if (k) m[k] = (m[k] || 0) + 1 }
+    return m
+  }, [rubrics])
+  const doubleApproved = useMemo(() => {
+    const m = {}
+    for (const r of rubrics) { const k = dupKey(r); if (k && r.approved) m[k] = (m[k] || 0) + 1 }
+    return Object.entries(m).filter(([, n]) => n > 1).map(([k]) => {
+      const [, sid] = k.split('|')
+      return studentById[sid]?.name ?? 'Onbekend'
+    })
+  }, [rubrics, studentById])
 
   // Where each toets × klas is stored
   const saveGroups = useMemo(() => {
@@ -240,7 +352,7 @@ export default function ScanImport() {
   if (phase === 'pick' || phase === 'reading') {
     return (
       <div className="page">
-        <BackButton fallback="/tests" />
+        <BackButton fallback="/sessions/new" />
         <div className="page-header"><h1>Importeer scans</h1></div>
         {error && <div className="alert alert-error">{error}</div>}
         <div className="card">
@@ -306,9 +418,14 @@ export default function ScanImport() {
         <div className="card" style={{ borderLeft: '4px solid #dc2626' }}>
           <strong>{failed.length} pagina{failed.length === 1 ? '' : "'s"} niet gelezen</strong>
           {failed.map((f, i) => (
-            <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
-              {f.image && <img src={f.image} alt="" style={{ width: 60, border: '1px solid #e5e7eb' }} />}
-              <div><strong>{f.label}</strong>: {f.error}</div>
+            <div key={f.index ?? `x${i}`} style={{ display: 'flex', gap: 16, alignItems: 'flex-start', marginTop: 12, flexWrap: 'wrap' }}>
+              {f.image && <img src={f.image} alt={f.label} style={{ width: 260, border: '1px solid #e5e7eb' }} />}
+              <div style={{ flex: 1, minWidth: 240 }}>
+                <div><strong>{f.label}</strong>: {f.error}</div>
+                {f.assignable
+                  ? <AssignPage page={f} tests={allTests} students={students} onRead={(t, s, n) => assignPage(f, t, s, n)} />
+                  : <div className="text-muted" style={{ marginTop: 4 }}>{TIP}</div>}
+              </div>
             </div>
           ))}
         </div>
@@ -316,6 +433,7 @@ export default function ScanImport() {
 
       {rubrics.map(r => (
         <RubricCard key={r.key} rubric={r} test={tests[r.testId]} students={students} studentById={studentById}
+          duplicate={(dupCount[dupKey(r)] || 0) > 1}
           open={open.has(r.key)} onToggle={() => toggleOpen(r.key)}
           onValue={(itemId, v) => setValue(r.key, itemId, v)}
           onStudent={sid => update(r.key, x => ({ ...x, studentId: sid }))}
@@ -342,7 +460,12 @@ export default function ScanImport() {
             <input type="checkbox" checked={overwrite} onChange={e => setOverwrite(e.target.checked)} />
             Punten die al zijn ingevuld overschrijven
           </label>
-          <button className="btn btn-primary" disabled={!approvedCount || phase === 'saving'} onClick={save}>
+          {doubleApproved.length > 0 && (
+            <div className="alert alert-error">
+              {doubleApproved.join(', ')} {doubleApproved.length === 1 ? 'staat' : 'staan'} er twee keer goedgekeurd in voor dezelfde toets. Keur er maar één goed.
+            </div>
+          )}
+          <button className="btn btn-primary" disabled={!approvedCount || phase === 'saving' || doubleApproved.length > 0} onClick={save}>
             {phase === 'saving' ? 'Opslaan...' : `Opslaan (${approvedCount} rubric${approvedCount === 1 ? '' : 's'})`}
           </button>
           {toCheck > 0 && approvedCount > 0 && (
@@ -354,7 +477,7 @@ export default function ScanImport() {
   )
 }
 
-function RubricCard({ rubric: r, test, students, studentById, open, onToggle, onValue, onStudent, onApprove }) {
+function RubricCard({ rubric: r, test, students, studentById, duplicate, open, onToggle, onValue, onStudent, onApprove }) {
   const isOpdracht = test.grading_method === 'opdracht'
   const student = r.studentId ? studentById[r.studentId] : null
   const todo = openItems(r)
@@ -363,29 +486,19 @@ function RubricCard({ rubric: r, test, students, studentById, open, onToggle, on
     : test.questions.filter(q => r.items[q.id]).map(q => ({ id: q.id, label: q.description, max: q.max_score, opts: Array.from({ length: q.max_score + 1 }, (_, p) => ({ value: p, label: String(p) })) }))
   const total = isOpdracht ? null : rows.reduce((n, row) => n + (r.items[row.id].value ?? 0), 0)
   const max = isOpdracht ? null : rows.reduce((n, row) => n + row.max, 0)
-  const byClass = useMemo(() => {
-    const m = {}
-    for (const s of students) (m[s.class_name] ||= []).push(s)
-    return Object.entries(m).sort(([a], [b]) => a.localeCompare(b, 'nl', { numeric: true }))
-  }, [students])
   const routeMismatch = student && r.route && student.route !== r.route
+  const changes = rubricChanges(r, test, student)
+  const pickStudent = r.blank || r.lostStudent
 
   return (
     <div className="card" data-rubric={r.key} style={{ borderLeft: `4px solid ${r.approved ? '#16a34a' : '#f59e0b'}` }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <button type="button" className="btn btn-secondary btn-sm" onClick={onToggle} aria-expanded={open}>{open ? '▼' : '▶'}</button>
         <div style={{ flex: 1, minWidth: 220 }}>
-          {r.blank ? (
+          {pickStudent ? (
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
               {r.pages[0].nameImage && <img src={r.pages[0].nameImage} alt="Handgeschreven naam" style={{ height: 34, border: '1px solid #e5e7eb', borderRadius: 4 }} />}
-              <select value={r.studentId ?? ''} onChange={e => onStudent(e.target.value ? Number(e.target.value) : null)}>
-                <option value="">Kies leerling...</option>
-                {byClass.map(([c, list]) => (
-                  <optgroup key={c} label={`Klas ${c}`}>
-                    {[...list].sort((a, b) => a.name.localeCompare(b.name, 'nl')).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </optgroup>
-                ))}
-              </select>
+              <StudentSelect value={r.studentId} students={students} onChange={onStudent} />
             </div>
           ) : (
             <strong style={{ fontSize: 15 }}>{student?.name ?? 'Onbekende leerling'}</strong>
@@ -406,8 +519,13 @@ function RubricCard({ rubric: r, test, students, studentById, open, onToggle, on
         </label>
       </div>
 
-      {(r.missingPages.length > 0 || r.duplicate || routeMismatch) && (
+      {(r.missingPages.length > 0 || r.duplicate || routeMismatch || duplicate || r.lostStudent || r.fallback || changes.length > 0) && (
         <div className="alert alert-error" style={{ marginTop: 10, marginBottom: 0 }}>
+          {r.lostStudent && <div>De leerling van dit blad bestaat niet meer in Rubricmaker. Kies de leerling.</div>}
+          {duplicate && <div>Deze leerling staat er twee keer in voor deze toets. Keur er maar één goed.</div>}
+          {r.fallback === 'layout' && <div>De QR-code was niet te gebruiken: gelezen met de laatst geprinte indeling. Kijk of de kaders op de hokjes vallen.</div>}
+          {r.fallback === 'none' && <div>Geen geprinte indeling gevonden: vul de punten zelf in, de scan staat ernaast.</div>}
+          {changes.map((c, i) => <div key={i}>{c}</div>)}
           {r.missingPages.length > 0 && <div>Blad {r.missingPages.join(', ')} ontbreekt in de scan.</div>}
           {r.duplicate && <div>Een blad van deze leerling is twee keer gescand; de laatste is gebruikt.</div>}
           {routeMismatch && <div>Dit blad is voor route {r.route}, de leerling heeft nu route {student.route}. Alleen de opgaven van route {student.route} worden opgeslagen.</div>}
@@ -424,6 +542,7 @@ function RubricCard({ rubric: r, test, students, studentById, open, onToggle, on
               <tbody>
                 {rows.map(row => {
                   const it = r.items[row.id]
+                  const status = !isOpdracht && it.value != null && it.value > row.max ? 'check' : it.status
                   return (
                     <tr key={row.id} data-item={row.id} data-status={it.status} style={{ borderBottom: '1px solid #eef0f4' }}>
                       <td style={{ padding: '6px 4px' }}>
@@ -438,7 +557,7 @@ function RubricCard({ rubric: r, test, students, studentById, open, onToggle, on
                         {!isOpdracht && <span className="text-muted"> / {row.max}</span>}
                       </td>
                       <td style={{ padding: '6px 4px' }}>
-                        <span className="test-tag" style={{ ...STATUS_STYLE[it.status], marginLeft: 0 }}>{it.edited ? 'Aangepast' : STATUS_TEXT[it.status]}</span>
+                        <span className="test-tag" style={{ ...STATUS_STYLE[status], marginLeft: 0 }}>{it.edited ? 'Aangepast' : STATUS_TEXT[status]}</span>
                       </td>
                     </tr>
                   )
@@ -479,6 +598,58 @@ function ScanPage({ page, items, onValue }) {
             }} />
         )
       })}
+    </div>
+  )
+}
+
+// The rubric was changed after this sheet was printed: say what doesn't match.
+function rubricChanges(r, test, student) {
+  if (r.fallback === 'none') return []
+  const out = []
+  const onSheet = new Set(Object.keys(r.items))
+  if (test.grading_method === 'opdracht') {
+    const crits = allCriteria(test)
+    const known = new Set(crits.map(({ criterion }) => String(criterion.id)))
+    for (const { criterion } of crits) if (!onSheet.has(String(criterion.id))) out.push(`Criterium "${criterion.name}" staat niet op dit blad (toegevoegd na het printen).`)
+    if ([...onSheet].some(id => !known.has(id))) out.push('Een criterium op dit blad bestaat niet meer in de rubric en wordt overgeslagen.')
+    return out
+  }
+  const route = student?.route ?? r.route
+  const known = new Set(test.questions.map(q => String(q.id)))
+  test.questions.forEach((q, i) => {
+    const it = r.items[q.id]
+    if (!it) {
+      if (!route || (q.routes || []).includes(route)) out.push(`Opgave ${i + 1} staat niet op dit blad (toegevoegd na het printen).`)
+    } else if (it.value != null && it.value > q.max_score) {
+      out.push(`Opgave ${i + 1}: ${it.value} aangekruist, het maximum is nu ${q.max_score}. Kies opnieuw, anders wordt dit niet opgeslagen.`)
+    }
+  })
+  if ([...onSheet].some(id => !known.has(id))) out.push('Een opgave op dit blad bestaat niet meer in de rubric en wordt overgeslagen.')
+  return out
+}
+
+// Link a page without a usable QR code to a toets and leerling.
+function AssignPage({ page, tests, students, onRead }) {
+  const [testId, setTestId] = useState('')
+  const [studentId, setStudentId] = useState(null)
+  const [pageNo, setPageNo] = useState(1)
+  const [busy, setBusy] = useState(false)
+  const sorted = useMemo(() => [...tests].sort((a, b) => a.name.localeCompare(b.name, 'nl', { numeric: true })), [tests])
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }} data-assign={page.index}>
+      <select value={testId} onChange={e => setTestId(e.target.value)}>
+        <option value="">Kies toets...</option>
+        {sorted.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+      </select>
+      <StudentSelect value={studentId} students={students} onChange={setStudentId} />
+      <label className="text-muted" title="Alleen nodig als de rubric meer dan één blad heeft">
+        Blad <input type="number" min={1} max={9} value={pageNo} onChange={e => setPageNo(Math.max(1, Number(e.target.value) || 1))} style={{ width: 50 }} />
+      </label>
+      <button className="btn btn-primary btn-sm" disabled={!testId || !studentId || busy}
+        onClick={async () => { setBusy(true); await onRead(Number(testId), studentId, pageNo); setBusy(false) }}>
+        Lezen
+      </button>
+      <div className="text-muted" style={{ width: '100%', fontSize: 12 }}>Lukt het niet? {TIP}</div>
     </div>
   )
 }

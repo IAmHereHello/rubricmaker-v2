@@ -162,14 +162,13 @@ const centre = loc => [
 // ── One page ─────────────────────────────────────────────────────────────────
 
 // Returns { sheetId, rect: ImageData of the straightened page (RECT_PX_PER_MM px/mm) }
-// or { error } with a Dutch explanation.
+// or { error } with a Dutch explanation. When the QR code can't be read but the four
+// markers can, it returns { noQr: true, rect }: the teacher then says whose page it is.
 export function analyzePage(canvas) {
   const w = canvas.width, h = canvas.height
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   const img = ctx.getImageData(0, 0, w, h)
   const qr = decodeQr(img)
-  if (!qr) return { error: 'Geen QR-code gevonden. Is dit een blad uit Print rubric?' }
-
   const gray = toGray(img.data, w * h)
   const paper = paperLevel(gray)
   const threshold = paper * 0.5
@@ -191,12 +190,18 @@ export function analyzePage(canvas) {
   const areas = found.filter(Boolean).map(m => m.area).sort((a, b) => a - b)
   const typical = areas.length ? areas[Math.floor(areas.length / 2)] : 0
   if (found.some(m => !m || m.area < typical * 0.7)) {
+    if (!qr) return { error: 'Geen QR-code gevonden. Is dit een blad uit Print rubric?' }
     return { sheetId: qr.id, error: 'Niet alle vier de zwarte hoekjes zijn gevonden. Scan het hele blad, recht en zonder schaduw.' }
   }
 
   // Which corner of the image holds which corner of the paper: pick the rotation
   // that puts the QR code where it was printed.
   const mm = markerCentres()
+  if (!qr) {
+    const H = orientWithoutQr(gray, w, h, found, mm, threshold)
+    if (!H) return { error: 'De QR-code is onleesbaar en het blad kon niet rechtgezet worden. Scan het opnieuw.' }
+    return { noQr: true, rect: straighten(img, H) }
+  }
   const qrMm = [SHEET.qr.x + SHEET.qr.size / 2, SHEET.qr.y + SHEET.qr.size / 2]
   let best = null
   for (let rot = 0; rot < 4; rot++) {
@@ -213,6 +218,30 @@ export function analyzePage(canvas) {
   }
 
   return { sheetId: qr.id, rect: straighten(img, best.H) }
+}
+
+// Without a QR code: the rotation that puts the most ink where the QR code is printed.
+// A damaged QR code is still a dark patch; the other corners are nearly empty.
+function orientWithoutQr(gray, w, h, found, mm, threshold) {
+  const { x, y, size } = SHEET.qr
+  const scores = []
+  for (let rot = 0; rot < 4; rot++) {
+    const dst = mm.map((_, k) => [found[(k + rot) % 4].x, found[(k + rot) % 4].y])
+    const H = solveHomography(mm, dst)
+    if (!H) continue
+    let n = 0, t = 0
+    for (let i = 0; i < 24; i++) for (let j = 0; j < 24; j++) {
+      const [ix, iy] = applyHomography(H, [x + (i + 0.5) * size / 24, y + (j + 0.5) * size / 24]).map(Math.round)
+      if (ix < 0 || iy < 0 || ix >= w || iy >= h) continue
+      t++
+      if (gray[iy * w + ix] < threshold) n++
+    }
+    scores.push({ H, dark: t ? n / t : 0 })
+  }
+  scores.sort((a, b) => b.dark - a.dark)
+  if (!scores.length || scores[0].dark < 0.2) return null
+  if (scores[1] && scores[1].dark * 1.5 > scores[0].dark) return null
+  return scores[0].H
 }
 
 // Map the paper onto a fixed grid of RECT_PX_PER_MM pixels per mm.

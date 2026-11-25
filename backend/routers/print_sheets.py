@@ -46,3 +46,31 @@ def get_sheets(ids: str = Query(""), db: DBSession = Depends(get_db)):
     if not wanted:
         return []
     return [_out(s) for s in db.query(PrintSheet).filter(PrintSheet.id.in_(wanted)).all()]
+
+
+@router.get("/latest")
+def latest_sheets(test_id: int, student_id: Optional[int] = None, route: Optional[str] = None,
+                  db: DBSession = Depends(get_db)):
+    """The most recently printed pages for a leerling, used to read a scan whose QR code
+    is unreadable. Falls back to the newest blank print for that route, then to any print
+    of the toets. Returns one row per page number (newest first wins)."""
+    base = db.query(PrintSheet).filter(PrintSheet.test_id == test_id)
+    candidates = []
+    if student_id is not None:
+        candidates.append(base.filter(PrintSheet.student_id == student_id))
+    if route:
+        candidates.append(base.filter(PrintSheet.student_id.is_(None), PrintSheet.route == route))
+    candidates.append(base.filter(PrintSheet.student_id.is_(None)))
+    candidates.append(base)
+    for q in candidates:
+        newest = q.order_by(PrintSheet.id.desc()).first()
+        if not newest:
+            continue
+        rows = (base.filter(PrintSheet.student_id.is_(None) if newest.student_id is None else PrintSheet.student_id == newest.student_id)
+                .filter(PrintSheet.route.is_(None) if newest.route is None else PrintSheet.route == newest.route)
+                .order_by(PrintSheet.id.desc()).all())
+        by_page = {}
+        for r in rows:
+            by_page.setdefault(r.page, r)
+        return [_out(by_page[p]) for p in sorted(by_page)]
+    return []
