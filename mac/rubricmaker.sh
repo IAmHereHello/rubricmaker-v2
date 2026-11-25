@@ -215,6 +215,200 @@ daily_backup() {
     backup_db "dagelijks"
 }
 
+# ---------- voortgangspagina tijdens bijwerken ----------
+# Bij een update opent de browser meteen een pagina die laat zien waar het bijwerken is.
+# Een klein Python-servertje (uit de eigen venv) serveert die pagina vanuit $STATUS_DIR.
+# Als alles klaar is, springt de pagina vanzelf door naar Rubricmaker.
+
+STATUS_DIR="$INSTALL_DIR/status"
+STATUS_ACTIVE=0
+
+STATUS_SERVER_PY=$(cat <<'PY'
+import http.server, json, os, sys, threading, time
+home = sys.argv[1]
+os.chdir(home)
+inode = os.stat(home).st_ino
+class Handler(http.server.SimpleHTTPRequestHandler):
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+    def log_message(self, *args):
+        pass
+srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+with open("port.tmp", "w") as f:
+    f.write(str(srv.server_address[1]))
+os.replace("port.tmp", "port")
+def watch():
+    start, done_at = time.time(), None
+    while True:
+        time.sleep(1)
+        try:
+            with open("status.json") as f:
+                done = json.load(f).get("done")
+        except Exception:
+            done = False
+        if done and done_at is None:
+            done_at = time.time()
+        try:
+            replaced = os.stat(home).st_ino != inode  # nieuwe update gestart
+        except OSError:
+            replaced = True
+        if replaced or (done_at and time.time() - done_at > 30) or time.time() - start > 1800:
+            srv.shutdown()
+            return
+threading.Thread(target=watch, daemon=True).start()
+srv.serve_forever()
+PY
+)
+
+status_write() { # stap(0-5) melding [url] [fout]
+    [ "$STATUS_ACTIVE" = 1 ] || return 0
+    local done=false
+    [ -n "${3:-}${4:-}" ] && done=true
+    printf '{"step": %s, "message": "%s", "done": %s, "url": "%s", "error": "%s"}\n' \
+        "$1" "$2" "$done" "${3:-}" "${4:-}" > "$STATUS_DIR/status.tmp"
+    mv -f "$STATUS_DIR/status.tmp" "$STATUS_DIR/status.json"
+}
+
+status_step() { status_write "$1" "$2"; }
+
+status_url() { # adres van de voortgangspagina als die nog draait
+    local port
+    port="$(cat "$STATUS_DIR/port" 2>/dev/null || true)"
+    [ -n "$port" ] && curl -fsS --max-time 1 "http://127.0.0.1:$port/status.json" >/dev/null 2>&1 \
+        && echo "http://127.0.0.1:$port/"
+    return 0
+}
+
+status_begin() {
+    [ -n "${RUBRICMAKER_NO_STATUS_PAGE:-}" ] && return 1
+    rm -rf "$STATUS_DIR"
+    mkdir -p "$STATUS_DIR"
+    write_status_page > "$STATUS_DIR/index.html"
+    STATUS_ACTIVE=1
+    status_step 0 "Nieuwe versie gevonden"
+    (
+        nohup "$VENV_DIR/bin/python" -c "$STATUS_SERVER_PY" "$STATUS_DIR" >> "$LOG_DIR/status.log" 2>&1 &
+    )
+    for _ in $(seq 1 20); do
+        if [ -n "$(status_url)" ]; then
+            open_url "$(status_url)"
+            return 0
+        fi
+        sleep 0.25
+    done
+    STATUS_ACTIVE=0
+    return 1
+}
+
+status_finish() { # url [fout]
+    status_write 5 "Klaar" "${1:-}" "${2:-}"
+    STATUS_ACTIVE=0
+}
+
+write_status_page() {
+    cat <<'HTML'
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rubricmaker wordt bijgewerkt</title>
+<style>
+  :root { --navy: #1e3a5f; --line: #e0e3ea; --bg: #f0f3f8; --muted: #5b6577; --red: #c0392b; --green: #2e7d4f; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+         background: var(--bg); color: #1d2433; padding: 16px;
+         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 32px 36px;
+          width: 100%; max-width: 460px; box-shadow: 0 8px 30px rgba(30, 58, 95, .08); }
+  h1 { margin: 0 0 6px; font-size: 22px; color: var(--navy); }
+  p.sub { margin: 0 0 22px; color: var(--muted); line-height: 1.45; }
+  .bar { height: 8px; background: var(--line); border-radius: 99px; overflow: hidden; margin-bottom: 22px; }
+  .bar > div { height: 100%; width: 3%; background: var(--navy); border-radius: 99px; transition: width .8s ease; }
+  ol { list-style: none; margin: 0; padding: 0; }
+  li { display: flex; align-items: center; gap: 12px; padding: 7px 0; color: var(--muted); }
+  li .dot { width: 22px; height: 22px; flex: none; border-radius: 50%; border: 2px solid var(--line);
+            display: flex; align-items: center; justify-content: center; font-size: 13px; color: #fff; }
+  li.now { color: #1d2433; font-weight: 600; }
+  li.now .dot { border-color: var(--navy); border-top-color: transparent; animation: spin 0.9s linear infinite; }
+  li.done .dot { background: var(--green); border-color: var(--green); }
+  li.done .dot::after { content: "\2713"; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .note { margin-top: 22px; font-size: 14px; color: var(--muted); }
+  .note.err { color: var(--red); }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1 id="title">Rubricmaker wordt bijgewerkt</h1>
+  <p class="sub" id="sub">Er is een nieuwe versie. Dit duurt meestal een à twee minuten. Je hoeft niets te doen: zodra het klaar is, opent Rubricmaker vanzelf in dit venster.</p>
+  <div class="bar"><div id="bar"></div></div>
+  <ol id="steps">
+    <li><span class="dot"></span>Nieuwe versie downloaden</li>
+    <li><span class="dot"></span>Onderdelen installeren</li>
+    <li><span class="dot"></span>App opbouwen (duurt het langst)</li>
+    <li><span class="dot"></span>Backup van je gegevens maken</li>
+    <li><span class="dot"></span>Rubricmaker starten</li>
+  </ol>
+  <p class="note" id="note">Je gegevens blijven gewoon bewaard.</p>
+</div>
+<script>
+  var fails = 0, shown = 0, target = 0;
+  var steps = document.querySelectorAll("#steps li");
+  function render(step) {
+    for (var i = 0; i < steps.length; i++) {
+      steps[i].className = i < step - 1 ? "done" : (i === step - 1 ? "now" : "");
+    }
+    target = Math.max(3, Math.round((step - 1) / steps.length * 100));
+  }
+  // Laat de balk binnen een stap langzaam doorlopen, zodat zichtbaar is dat er iets gebeurt.
+  setInterval(function () {
+    var cap = target + 100 / steps.length - 2;
+    shown = shown < target ? target : Math.min(cap, shown + 0.4);
+    document.getElementById("bar").style.width = shown + "%";
+  }, 500);
+  function poll() {
+    fetch("status.json?" + Date.now()).then(function (r) { return r.json(); }).then(function (s) {
+      fails = 0;
+      if (s.done) {
+        for (var i = 0; i < steps.length; i++) steps[i].className = "done";
+        target = shown = 100;
+        document.getElementById("bar").style.width = "100%";
+        var note = document.getElementById("note");
+        document.getElementById("sub").style.display = "none";
+        if (s.error) {
+          document.getElementById("steps").style.display = "none";
+          document.getElementById("title").textContent = "Bijwerken is niet gelukt";
+          note.className = "note err";
+          note.textContent = s.url ? s.error + " Rubricmaker opent zo." : s.error + " Klik opnieuw op het Rubricmaker-icoon. Lukt het dan nog niet, vraag hulp.";
+        } else {
+          document.getElementById("title").textContent = "Klaar!";
+          note.textContent = "Rubricmaker wordt geopend...";
+        }
+        if (s.url) setTimeout(function () { location.replace(s.url); }, s.error ? 4000 : 800);
+        return;
+      }
+      render(s.step || 1);
+      setTimeout(poll, 1000);
+    }).catch(function () {
+      if (++fails > 15) {
+        var note = document.getElementById("note");
+        note.className = "note err";
+        note.textContent = "Geen contact meer met het bijwerken. Klik opnieuw op het Rubricmaker-icoon.";
+        return;
+      }
+      setTimeout(poll, 1000);
+    });
+  }
+  render(1);
+  poll();
+</script>
+</body>
+</html>
+HTML
+}
+
 # ---------- code ophalen en bouwen ----------
 
 install_version() { # commit-id
@@ -224,14 +418,17 @@ install_version() { # commit-id
     mkdir -p "$new"
 
     say "  Code downloaden..."
+    status_step 1 "Nieuwe versie downloaden"
     download "${RUBRICMAKER_TARBALL:-https://codeload.github.com/$REPO_OWNER/$REPO_NAME/tar.gz/$version}" "$tmp/src.tar.gz" || return 1
     tar -xzf "$tmp/src.tar.gz" -C "$new" --strip-components=1 || return 1
     rm -rf "$tmp"
 
     say "  Backend-onderdelen installeren..."
+    status_step 2 "Onderdelen installeren"
     uv pip install --quiet --python "$VENV_DIR/bin/python" -r "$new/backend/requirements.txt" || return 1
 
     say "  Frontend bouwen (kan een minuut duren)..."
+    status_step 3 "App opbouwen"
     (
         cd "$new/frontend" &&
         npm ci --no-audit --no-fund --loglevel=error >> "$LOG_DIR/install.log" 2>&1 &&
@@ -240,6 +437,7 @@ install_version() { # commit-id
     ) || return 1
     [ -f "$new/frontend/dist/index.html" ] || return 1
 
+    status_step 4 "Backup maken"
     backup_db "voor-update" || return 1
     rm -rf "$INSTALL_DIR/app.old"
     [ -d "$APP_DIR" ] && mv "$APP_DIR" "$INSTALL_DIR/app.old"
@@ -342,32 +540,50 @@ cmd_start() {
         exit 1
     fi
     if ! take_lock; then
-        # Er wordt al gestart; open alleen de browser zodra de server er is.
+        # Er wordt al gestart. Wordt er bijgewerkt, toon dan de voortgangspagina opnieuw;
+        # anders alleen de browser openen zodra de server er is.
+        local busy
+        busy="$(status_url)"
+        if [ -n "$busy" ]; then open_url "$busy"; exit 0; fi
         for _ in $(seq 1 120); do server_running && break; sleep 1; done
         server_running && open_url "http://127.0.0.1:$(current_port)"
         exit 0
     fi
 
-    local latest
+    local latest update_error=""
     latest="$(latest_version)"
     if [ -n "$latest" ] && [ "$latest" != "$(installed_version)" ]; then
-        notify "Nieuwe versie gevonden. Rubricmaker wordt bijgewerkt, dit duurt ongeveer een minuut."
+        mkdir -p "$LOG_DIR"
+        # Voortgangspagina in de browser; lukt dat niet, dan alleen een melding.
+        status_begin || notify "Nieuwe versie gevonden. Rubricmaker wordt bijgewerkt, dit duurt ongeveer een minuut."
         ensure_uv && ensure_node && ensure_venv || true
         stop_server
         if install_version "$latest" >> "$LOG_DIR/install.log" 2>&1; then
             create_mac_app
         else
             rm -rf "$INSTALL_DIR/app.new"
-            alert "Bijwerken is mislukt. Je werkt verder met de vorige versie."
+            update_error="Bijwerken is mislukt. Je werkt verder met de vorige versie."
+            [ "$STATUS_ACTIVE" = 1 ] || alert "$update_error"
         fi
     fi
 
     if ! server_running; then
+        status_step 5 "Rubricmaker starten"
         daily_backup || true
         stop_server
-        start_server || { alert "Rubricmaker start niet. Zie $LOG_DIR/server.log"; exit 1; }
+        if ! start_server; then
+            status_finish "" "Rubricmaker start niet."
+            alert "Rubricmaker start niet. Zie $LOG_DIR/server.log"
+            exit 1
+        fi
     fi
-    open_url "http://127.0.0.1:$(current_port)"
+    local url="http://127.0.0.1:$(current_port)"
+    if [ "$STATUS_ACTIVE" = 1 ]; then
+        # De voortgangspagina springt zelf door naar Rubricmaker.
+        status_finish "$url" "$update_error"
+    else
+        open_url "$url"
+    fi
 }
 
 cmd_stop() { stop_server; say "Rubricmaker is gestopt."; }
